@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="建築漏水診斷與修繕模擬器：逐格水分擴散與 PU 止水">
+  <link rel="icon" href="data:,">
+  <title>漏水打針模擬器 · 互動實驗室</title>
+  <link rel="stylesheet" href="/src/ui/styles.css">
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark">💧</div>
+        <div>
+          <h1>漏水打針模擬器</h1>
+          <p>互動實驗室 · 找到水路，追蹤修復效果</p>
+        </div>
+      </div>
+      <div class="top-status">
+        <span class="pill" id="assetStatus" aria-live="polite"><i class="dot"></i>本機程序素材就緒</span>
+        <span class="pill"><i class="dot"></i>Scenario 01 / 02 · Cellular Engine</span>
+        <span class="pill warn"><i class="dot"></i>教育模擬，不是施工規範</span>
+      </div>
+    </header>
+
+    <main class="workspace">
+      <aside class="panel controls">
+        <div class="scroll">
+          <section class="section workflow">
+            <div class="section-title"><h2>操作流程</h2><span>1 — 5 快捷鍵</span></div>
+            <div class="segmented" id="modeButtons" aria-label="選擇操作工具">
+              <button type="button" class="active" data-mode="inspect" aria-pressed="true">檢測</button>
+              <button type="button" data-mode="drill" aria-pressed="false">鑽孔</button>
+              <button type="button" data-mode="insert" aria-pressed="false">塞針</button>
+              <button type="button" data-mode="inject" aria-pressed="false">注入</button>
+              <button type="button" data-mode="verify" aria-pressed="false">驗證</button>
+            </div>
+            <p id="workflowSummary" class="workflow-summary">先量測基準濕度點，再量測可疑濕區</p>
+            <p class="hint" id="modeHint">移動游標預覽濕度，點擊固定讀值。</p>
+            <button class="btn" id="undoBtn" type="button" disabled>↶ 撤銷上一步</button>
+          </section>
+          <section class="section">
+            <div class="section-title"><h2>情境選擇</h2><span>Scenario</span></div>
+            <p class="hint scenario-hint">Scenario 01、02A、02B 已接上分層引擎。其他情境保留初版示意，TODO：移植物理模型。切換會重置進度。</p>
+            <div class="scenario-grid">
+              <button type="button" class="scenario-card" data-scenario="window" aria-pressed="false">
+                <span class="card-head"><span class="icon">🪟</span><span><strong>窗框／窗台滲水</strong><small>雨水從開口與排水層進入牆體</small></span></span>
+              </button>
+              <button type="button" class="scenario-card active" data-scenario="crack" aria-pressed="true">
+                <span class="card-head"><span class="icon">🧱</span><span><strong>01 · 外牆裂縫滲水</strong><small>逐格擴散 → PU 止水 → 乾燥</small></span></span>
+              </button>
+              <button type="button" class="scenario-card" data-scenario="bathroom" aria-pressed="false">
+                <span class="card-head"><span class="icon" aria-hidden="true">🚿</span><span><strong>02A 浴室防水失效</strong><small>樓下天花／外側牆腳</small></span></span>
+              </button>
+              <button type="button" class="scenario-card" data-scenario="hotpipe" aria-pressed="false">
+                <span class="card-head"><span class="icon" aria-hidden="true">🚰</span><span><strong>02B 熱水暗管破損</strong><small>隔離舊管 → 改明管</small></span></span>
+              </button>
+              <button type="button" class="scenario-card" data-scenario="pipe" aria-pressed="false">
+                <span class="card-head"><span class="icon">🛠️</span><span><strong>管線漏水陷阱</strong><small>高讀值不代表適合打針</small></span></span>
+              </button>
+              <button type="button" class="scenario-card" data-scenario="condensation" aria-pressed="false">
+                <span class="card-head"><span class="icon">🌫️</span><span><strong>結露與高濕度</strong><small>分辨水氣問題與外牆漏水</small></span></span>
+              </button>
+              <button type="button" class="scenario-card" data-scenario="rooftop" aria-pressed="false">
+                <span class="card-head"><span class="icon">🏙️</span><span><strong>樓頂陽台向下滲漏</strong><small>雨水積在陽台，穿過樓板漏到下層天花</small></span></span>
+              </button>
+            </div>
+          </section>
+
+          <section class="section">
+            <div class="section-title"><h2>環境控制</h2><span>Environment</span></div>
+            <div class="field">
+              <label for="rainSlider">降雨強度 <output id="rainValue">72%</output></label>
+              <input id="rainSlider" type="range" min="0" max="100" value="72">
+            </div>
+            <div class="field">
+              <label for="rainColorPicker">雨水顏色 <output id="rainColorValue">#51D6F4</output></label>
+              <div class="color-control">
+                <input id="rainColorPicker" type="color" value="#51d6f4" aria-label="選擇雨水顏色">
+                <button type="button" class="btn color-reset" id="rainColorResetBtn">↺ 預設顏色</button>
+              </div>
+              <span class="color-hint">套用到雨線、水滴、水路與滴水標記</span>
+            </div>
+            <div class="field">
+              <label for="windSlider">側風／水壓 <output id="windValue">38%</output></label>
+              <input id="windSlider" type="range" min="0" max="100" value="38">
+            </div>
+            <div class="field">
+              <label for="timeSlider">時間倍率 <output id="timeValue">1×</output></label>
+              <select id="timeSlider"><option value="0">Pause</option><option value="1" selected>1×</option><option value="5">5×</option><option value="20">20×</option></select>
+            </div>
+            <div class="action-row">
+              <button class="btn flex" id="playPauseBtn">⏸ 暫停模擬</button>
+              <button class="btn flex" id="resetBtn">↺ 重置</button>
+            </div>
+          </section>
+
+          <section class="section">
+            <div class="section-title"><h2>工具設定</h2><span>Instrument</span></div>
+            <div class="field">
+              <label for="meterSelect">水分儀模式</label>
+              <select id="meterSelect">
+                <option value="pinless">非針式：表面近場</option>
+                <option value="pin">針式：局部插入</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="materialSelect">材料模式</label>
+              <select id="materialSelect">
+                <option value="pu">PU／聚氨酯：止水、柔性</option>
+                <option value="epoxy">環氧樹脂：靜止裂縫、黏結</option>
+                <option value="acrylate">丙烯酸凝膠：細微通道、進階</option>
+              </select>
+            </div>
+            <div class="field" id="crackStateField">
+              <label>裂縫狀態</label>
+              <div class="mini-segment" id="crackStateButtons">
+                <button class="active" data-crack="static">靜止</button>
+                <button data-crack="moving">活動</button>
+              </div>
+            </div>
+            <div class="action-row">
+              <button class="btn flex" id="measureBtn">⌁ 測量基準濕度點</button>
+              <button class="btn flex" id="sectionBtn">◈ 剖面視圖</button>
+            </div>
+            <div class="action-row">
+              <button class="btn flex" id="soundBtn">🔇 開啟滴水音</button>
+              <button class="btn flex" id="labelsBtn" aria-pressed="true">🏷 隱藏標籤</button>
+            </div>
+          <button class="btn" id="loadAssetsBtn" type="button">載入原版外部素材（選用）</button></section>
+
+          <section class="section" id="scenarioActionSection">
+            <div class="section-title"><h2>源頭修繕</h2><span>Source first</span></div>
+            <p class="hint" id="sourceHint">窗框問題先看排水層，不要把表面打膠當成完整防水。</p>
+            <div class="action-row">
+              <button class="btn primary flex" id="sourceFixBtn">修正窗台排水</button>
+            </div>
+          </section>
+
+          <section class="section">
+            <p class="footnote">⚠ 本工具將現場材料、壓力與水路簡化成可解釋的教學模型。實際鑽孔、注入、化學品與結構判斷，需依現場條件、產品資料與合格專業人員評估。</p>
+          </section>
+        </div>
+      </aside>
+
+      <section class="viewport" id="viewport">
+        <canvas id="scene" aria-label="漏水互動場景：點擊執行工具，拖曳旋轉，雙指縮放。也可透過右側孔位清單進行塞針與注入。"></canvas>
+        <div class="viewport-top">
+          <div class="scene-label"><strong id="sceneTitle">窗框／窗台滲水</strong><span id="sceneSubtitle">觀察雨水如何進入牆內排水層</span></div>
+          <div class="mode-badge" id="modeBadge">檢測模式</div>
+        </div>
+        <div class="scene-toolbar" aria-label="場景視角與顯示">
+          <button class="btn" type="button" id="frontViewBtn">正面定位</button>
+          <button class="btn" type="button" id="homeViewBtn">全景</button>
+          <button class="btn" type="button" id="topViewBtn" hidden>陽台俯視</button>
+          <button class="btn" type="button" id="cutawayBtn" aria-pressed="false">剖面</button>
+        </div>
+        <div class="hover-readout" id="hoverReadout" hidden></div>
+        <div class="operation-dock">
+          <div class="dock-row"><strong id="operationTitle">先建立基準濕度點</strong><button class="btn primary" type="button" id="nextStepBtn">下一步</button><button class="btn danger" type="button" id="stopInjectionBtn" hidden>停止注入</button></div>
+          <p id="operationDetail">移動游標可預覽表面濕度。</p>
+          <progress id="operationProgress" max="1" value="0" aria-label="目前作業進度" hidden></progress>
+        </div>
+        <div class="viewport-bottom">
+          <div class="legend">
+            <span><i class="water" id="waterLegendSwatch"></i>水路／濕區</span>
+            <span><i class="inject"></i>灌注材料</span>
+            <span><i class="eff"></i>白華</span>
+            <span><i class="mold"></i>黴菌累積</span>
+          </div>
+          <div class="gesture-hint">拖曳旋轉 · 滾輪縮放 · 點擊執行目前工具</div>
+        </div>
+        <div class="toast" id="toast" role="status" aria-live="polite"></div>
+      </section>
+
+      <aside class="panel inspector">
+        <div class="scroll">
+          <section class="section">
+            <div class="section-title"><h2>孔位與作業</h2><span id="portCount">0 個孔位</span></div>
+            <p class="hint" id="portHint">鑽孔後可點選清單定位，再塞針、注入。</p>
+            <div class="port-list" id="portList"></div>
+          </section>
+          <section class="section" id="verificationSection" hidden>
+            <div class="section-title"><h2>修繕效果驗證</h2><span>同條件比較</span></div>
+            <p id="verificationResult" class="verification-result" role="status" aria-live="polite"></p>
+          </section>
+          <section class="section">
+            <div class="section-title"><h2>現場狀態</h2><span>Live state</span></div>
+            <div class="metric-grid">
+              <div class="metric accent"><small>目前漏水率</small><strong id="leakMetric">0.00</strong><em>相對入水流量</em></div>
+              <div class="metric warning"><small>牆／天花最高含水</small><strong id="moistureMetric">8%</strong><em>逐格模型 · 0–100%</em></div>
+              <div class="metric"><small>白華累積</small><strong id="effloMetric">0%</strong><em>鹽分與乾濕循環</em></div>
+              <div class="metric danger"><small>黴菌累積</small><strong id="moldMetric">0%</strong><em>持續潮濕指標</em></div>
+            </div>
+          </section>
+
+          <section class="section">
+            <div class="section-title"><h2>診斷建議</h2><span>Explainable rules</span></div>
+            <div class="diagnosis">
+              <div class="eyebrow" id="diagnosisEyebrow">目前觀察</div>
+              <h3 id="diagnosisTitle">先建立基準濕度點</h3>
+              <p id="diagnosisText">水分儀的單一數字不能直接證明漏水。請先在同材質、未受影響的位置建立對照讀值。</p>
+              <div class="confidence" title="教學規則的符合程度，不是經校準的現場診斷機率。"><span>規則符合度</span><div class="confidence-track"><i id="confidenceBar"></i></div><span id="confidenceValue">42%</span></div>
+            </div>
+          </section>
+
+          <section class="section">
+            <div class="section-title"><h2>測量讀值</h2><span>Meter reading</span></div>
+            <div class="mini-segment sample-choices" aria-label="量測記錄目標"><button type="button" id="controlSampleBtn" aria-pressed="true">記錄基準濕度點</button><button type="button" id="suspectSampleBtn" aria-pressed="false">記錄可疑點</button></div>
+            <div class="metric-grid">
+              <div class="metric"><small>基準濕度點</small><strong id="controlMetric">—</strong><em id="controlMeta">尚未建立</em></div>
+              <div class="metric accent"><small>可疑點</small><strong id="suspectMetric" class="reading-with-unit">濕度 —</strong><em id="suspectMeta">點擊場景測量</em></div>
+            </div>
+          </section>
+
+          <section class="section">
+            <div class="section-title"><h2>本情境的行動</h2><span>Next actions</span></div>
+            <div class="action-list" id="actionList"></div>
+          </section>
+
+          <section class="section">
+            <div class="section-title"><h2>操作紀錄</h2><span>Event log</span></div>
+            <div class="log" id="eventLog"></div>
+          </section>
+        </div>
+      </aside>
+    </main>
+  </div>
+
+  
+  
+<script src="/vendor/three-r128.min.js"></script>
+<script type="module" src="/src/main.ts"></script>
+</body>
+</html>

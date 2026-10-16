@@ -1,0 +1,30 @@
+{
+  "name": "wall-leak-simulator",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview --host 127.0.0.1",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src tests",
+    "test": "tsx --test tests/*.test.ts",
+    "test:browser": "node tests/browser.mjs && node tests/bathroom-browser.mjs && node tests/rendering-browser.mjs && node tests/floor-browser.mjs",
+    "test:browser:bathroom": "node tests/bathroom-browser.mjs",
+    "test:browser:rendering": "node tests/rendering-browser.mjs",
+    "test:browser:floor": "node tests/floor-browser.mjs"
+  },
+  "devDependencies": {
+    "vite": "^7.1.0",
+    "typescript": "^5.9.0",
+    "tsx": "^4.20.0",
+    "eslint": "^9.35.0",
+    "@eslint/js": "^9.35.0",
+    "typescript-eslint": "^8.42.0",
+    "@types/three": "0.128.0",
+    "@types/node": "^22.0.0",
+    "globals": "^16.3.0",
+    "playwright": "^1.55.0"
+  }
+}
