@@ -31,8 +31,8 @@ export function createExteriorCrack(): SimulationState {
     scenarioId: 'crack', slab: null, junctions: [],
     wall, cracks, waterproofLayers: [4], pipes: [],
     waterSources: [{ cell: pointIndex(wall, exteriorSource, 5), position: exteriorSource, enabled: true, flow: 0, unsealedFlow: 0, kind: 'rain', domain: 'wall', footprint: [], defects: [] }],
-    repairs: { ports: [], activePortId: null, pressure: 0, nextId: 1, job: null, waterproofRepaired: false, bypassInstalled: false, surfacePatchCount: 0 },
-    tools: { probe: null, probeDomain: 'wall', mode: 'pinless', floorTestArmed: false }, environment: { rain: .72, wind: .38, bathroomUse: 1, pipeValveOpen: true, pipePressure: .4 },
+    repairs: { ports: [], activePortId: null, pressure: 0, nextId: 1, job: null, waterproofRepaired: false, bypassInstalled: false, drainRepaired: false, surfacePatchCount: 0 },
+    tools: { probe: null, probeDomain: 'wall', mode: 'pinless', floorTestArmed: false }, environment: { rain: .72, wind: .38, bathroomUse: 1, pipeValveOpen: true, pipePressure: .4, drainUse: 0, groundwaterPressure: .35, ambientTemperatureC: 22 },
     simulationTime: 0, running: true, timeScale: 1,
     metrics: { meanMoisture: 8, surfaceMax: 8, wallSurfaceMax: 8, ceilingSurfaceMax: 8, floorSurfaceMax: 8, floorMeanMoisture: 8, floorInflow: 0, internalMax: 8, efflorescence: 0, mold: 0, damage: 0, leakRate: 0, reduction: 0, expansion: 1, volumeMl: 0 },
   };

@@ -1,6 +1,7 @@
 import { createBathroom } from '../scenarios/bathroom';
 import { updateBathroomRepairs } from './bathroomRepairs';
 import { createExteriorCrack } from '../scenarios/exteriorCrack';
+import { createDiagnosticScenario } from '../scenarios/diagnostic';
 import { updateDamage } from './damageSimulation';
 import { updateRepairs } from './repairSimulation';
 import { updateWater } from './waterSimulation';
@@ -15,7 +16,9 @@ export class SimulationEngine {
   private floorDelta = new Float64Array(0);
   constructor(scenario: ScenarioId = 'crack') { this.reset(scenario); }
   reset(scenario: ScenarioId = 'crack'): void {
-    this.state = scenario === 'crack' ? createExteriorCrack() : createBathroom(scenario);
+    this.state = scenario === 'crack' ? createExteriorCrack()
+      : scenario === 'bathroom' || scenario === 'hotpipe' ? createBathroom(scenario)
+        : createDiagnosticScenario(scenario);
     this.delta = new Float64Array(this.state.wall.cells.length); this.slabDelta = new Float64Array(this.state.slab?.cells.length ?? 0); this.floorDelta = new Float64Array(this.state.floor.cells.length);
     this.accumulator = 0;
   }

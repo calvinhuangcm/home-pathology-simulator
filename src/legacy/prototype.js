@@ -14,6 +14,9 @@ import { insertNeedle as fixNeedle, startInjection } from '../tools/injector';
 import { createMoistureField } from '../renderer/moistureField';
 import { createSimulationControls } from '../ui/simulationControls';
 import { connectEngine } from '../ui/engineBridge';
+import { createDiagnosticControls } from '../ui/diagnosticControls';
+import { brushWaterproof } from '../tools/surfaceWaterproof';
+import { surfaceTemperatureC } from '../tools/thermalCamera';
 
 // Preserved prototype controller. Only legacy scenarios use the scalar demo model below.
 // Scenario 01 delegates every physical reading/action to the typed SimulationEngine.
@@ -164,12 +167,20 @@ import { connectEngine } from '../ui/engineBridge';
       changeView: () => { cancelGestures(); setView('home'); updateMeasurementMarkers(); refreshUI(); },
       remember: snapshot => remember('浴室修繕', () => {}, snapshot),
     });
+    const diagnosticControls = createDiagnosticControls(engine, simulationControls.view, {
+      notify: (message, type) => { showToast(message, type); addLog(message, type); },
+      beforeChange: () => captureRepairBaseline(),
+      changed: () => { state.verification = null; refreshUI(); },
+      changeView: () => { cancelGestures(); setView('home'); updateMeasurementMarkers(); refreshUI(); },
+      remember: snapshot => remember('診斷情境修繕', () => {}, snapshot),
+    });
     const floorControls = createFloorControls(engine, simulationControls.view, {
       changeView: () => { if (engine.state.tools.floorTestArmed && state.mode !== 'inspect') setMode('inspect'); cancelGestures(); setView('home'); updateMeasurementMarkers(); refreshUI(); },
       notify: (message, type) => showToast(message, type),
     });
     let fieldRenderer, ceilingFieldRenderer, floorFieldRenderer, bathroomScene, floorSurface;
     let activePath = [];
+    let activeBrushStroke = null;
     let uiElapsed = 0;
     let visualElapsed = 0;
 
@@ -633,7 +644,7 @@ import { connectEngine } from '../ui/engineBridge';
       clearGroup(injectionGroup);
       clearGroup(portGroup);
       clearGroup(needleGroup);
-      if (isBathroomScenario(state.scenario)) { updateCutawayVisual(); return; }
+      if (isCellularScenario(state.scenario)) { updateCutawayVisual(); return; }
       const path = pathPoints();
       const pathLine = addLine(path, new THREE.LineBasicMaterial({ color: state.rainColor, transparent: true, opacity: .25 }), waterGroup, 'water-path');
       pathLine.userData.path = path;
@@ -716,13 +727,13 @@ import { connectEngine } from '../ui/engineBridge';
       const badge = modeLabels[state.mode][0];
       ui.modeBadge.textContent = badge;
       ui.modeHint.textContent = state.scenario === 'crack' && state.mode === 'verify' ? '在相同雨勢與側風下觀察 120 秒模擬時間，比較修繕前後趨勢。' : modeLabels[state.mode][1];
-      if (isBathroomScenario(state.scenario)) ui.modeHint.textContent = state.mode === 'verify' ? '恢復修繕前相同用水／供水壓力，觀察 120 秒。' : '量測濕區與乾區；使用浴室供水與源頭修繕控制，再驗證乾燥趨勢。';
+      if (state.scenario !== 'crack' && isCellularScenario(state.scenario)) ui.modeHint.textContent = state.mode === 'verify' ? '恢復修繕前相同供水條件，觀察 120 秒。' : '量測濕區與乾區；依來源調整供水與修繕，再驗證乾燥趨勢。';
       document.getElementById('scenarioActionSection').hidden = isCellularScenario(state.scenario);
       updateScenarioFeatureVisibility();
     }
 
     function updateRainField() {
-      if (isBathroomScenario(state.scenario)) { rainGroup.visible = false; return; }
+      if (isCellularScenario(state.scenario) && state.scenario !== 'crack') { rainGroup.visible = false; return; }
       const intensity = state.rain;
       rainGroup.visible = intensity > .01;
       const opacity = .16 + intensity * .48;
@@ -1267,7 +1278,7 @@ import { connectEngine } from '../ui/engineBridge';
         return moistureReading(engine.state, local, mode, 'floor') / 100;
       }
       if (isCellularScenario(state.scenario)) {
-        if (isBathroomScenario(state.scenario) && ((surface === 'wall' && simulationControls.view.surface === 'slab') || (surface === 'ceiling' && simulationControls.view.surface !== 'slab'))) return null;
+        if (engine.state.slab && ((surface === 'wall' && simulationControls.view.surface === 'slab') || (surface === 'ceiling' && simulationControls.view.surface !== 'slab'))) return null;
         if (surface === 'wall') return moistureReading(engine.state, point, mode) / 100;
         if (surface === 'ceiling' && engine.state.slab) return moistureReading(engine.state, { x: point.x, y: 6.65 - point.z }, mode, 'slab') / 100;
         return null;
@@ -1385,7 +1396,7 @@ import { connectEngine } from '../ui/engineBridge';
       if (simulationControls.view.surface === 'floor') {
         orbit.target.set(0, FLOOR_SURFACE.top, FLOOR_SURFACE.originZ + FLOOR_SURFACE.height / 2); orbit.yaw = 0; orbit.pitch = 1.12; orbit.distance = 15.5 * Math.max(1, .86 / Math.max(.25, camera.aspect)); updateCamera(); return;
       }
-      if (state.scenario === 'bathroom' && simulationControls.view.surface === 'slab') {
+      if ((state.scenario === 'bathroom' || state.scenario === 'multi') && simulationControls.view.surface === 'slab') {
         orbit.target.set(0, 5.8, 3.65); orbit.yaw = 0; orbit.pitch = -.48; orbit.distance = 15 * Math.max(1, .86 / Math.max(.25, camera.aspect)); updateCamera(); return;
       }
       const roof = state.scenario === 'rooftop';
@@ -1442,7 +1453,7 @@ import { connectEngine } from '../ui/engineBridge';
       if (hoverRing.visible) {
         hoverRing.position.copy(hit.point).addScaledVector(hit.normal, .028);
         hoverRing.quaternion.setFromUnitVectors(outward, hit.normal);
-        const color = state.mode === 'drill' && invalidSurface ? 0xff778b : hit.port ? 0xf7c76a : 0x55d6e6;
+        const color = (state.mode === 'drill' || state.mode === 'paint') && invalidSurface ? 0xff778b : state.mode === 'paint' ? 0x54e0b3 : hit.port ? 0xf7c76a : 0x55d6e6;
         hoverRing.material.color.setHex(color);
         hoverRing.scale.setScalar(hit.port ? 1.5 : 1);
       }
@@ -1486,12 +1497,19 @@ import { connectEngine } from '../ui/engineBridge';
       else if (state.mode === 'inspect') {
         const reading = meterReading(hit.point, state.meter, hit.surface);
         message += reading === null ? ' · 尚未建立此表面模型' : ` · 濕度 ${fmtPct(reading)} · ${moistureStatus(reading * 100)}\n點擊記錄${state.sampleTarget === 'control' ? '基準濕度點' : '可疑點'}`;
+        if (simulationControls.view.thermal && reading !== null && isCellularScenario(state.scenario)) {
+          const domain = hit.surface === 'floor' ? 'floor' : hit.surface === 'ceiling' ? 'slab' : 'wall';
+          const point = { x: hit.point.x, y: domain === 'floor' ? hit.point.z - FLOOR_SURFACE.originZ : domain === 'slab' ? 6.65 - hit.point.z : hit.point.y };
+          const temperature = surfaceTemperatureC(engine.state, point, domain);
+          if (temperature !== null) message += `\n熱像估算 ${temperature.toFixed(1)}°C`;
+        }
         if ((isCellularScenario(state.scenario) || hit.surface === 'floor') && reading !== null) {
           const domain = hit.surface === 'floor' ? 'floor' : hit.surface === 'ceiling' ? 'slab' : 'wall';
           engine.state.tools.probeDomain = domain;
           engine.state.tools.probe = { x: hit.point.x, y: domain === 'floor' ? hit.point.z - FLOOR_SURFACE.originZ : domain === 'slab' ? 6.65 - hit.point.z : hit.point.y };
         }
       }
+      else if (state.mode === 'paint') message += ['wall', 'ceiling', 'floor'].includes(hit.surface) ? '\n按住左鍵拖曳自由塗刷防水' : '\n此表面不可塗刷';
       else if (state.mode === 'drill') message += ['wall', 'ceiling'].includes(hit.surface) ? '\n點擊鑽孔' : '\n這個表面不建立注入口';
       else if (hit.port) message += ` · 孔位 #${hit.port.id}\n${hit.port.inserted ? '已塞針' : '已鑽孔'} · 填充 ${fmtPct(hit.port.volume)}`;
       else if (state.mode !== 'verify') message += '\n靠近已有孔位以吸附';
@@ -1573,8 +1591,53 @@ import { connectEngine } from '../ui/engineBridge';
       }
     }
 
+    function paintDomainPoint(hit) {
+      if (hit.surface === 'wall') return { domain: 'wall', point: { x: hit.point.x, y: hit.point.y } };
+      if (hit.surface === 'ceiling') return { domain: 'slab', point: { x: hit.point.x, y: 6.65 - hit.point.z } };
+      if (hit.surface === 'floor') return { domain: 'floor', point: { x: hit.point.x, y: hit.point.z - FLOOR_SURFACE.originZ } };
+      return null;
+    }
+
+    function applyBrushAtHit(hit, stroke) {
+      if (!hit || !isCellularScenario(state.scenario)) return false;
+      const target = paintDomainPoint(hit);
+      if (!target) { showToast('自由塗刷只能施作在室內牆面、地板或可見樓板表面。', 'warn'); return false; }
+      const key = target.domain;
+      if (!stroke.paintedByDomain.has(key)) stroke.paintedByDomain.set(key, new Set());
+      const painted = stroke.paintedByDomain.get(key);
+      const previous = stroke.lastByDomain.get(key);
+      const distance = previous ? Math.hypot(target.point.x - previous.x, target.point.y - previous.y) : 0;
+      const steps = Math.max(1, Math.ceil(distance / .24));
+      for (let step = 1; step <= steps; step++) {
+        const point = previous ? { x: lerp(previous.x, target.point.x, step / steps), y: lerp(previous.y, target.point.y, step / steps) } : target.point;
+        const result = brushWaterproof(engine.state, target.domain, point, painted);
+        stroke.count += result.changed;
+      }
+      stroke.lastByDomain.set(key, target.point);
+      if (stroke.count > 0) captureRepairBaseline();
+      return true;
+    }
+
+    function commitBrushStroke() {
+      if (!activeBrushStroke) return;
+      if (activeBrushStroke.count > 0) {
+        remember('自由塗刷防水', () => {}, activeBrushStroke.snapshot);
+        addLog(`自由塗刷防水：更新 ${activeBrushStroke.count} 個表層網格；不會封堵持續中的管線或負水壓水源。`, 'good');
+        showToast(`已塗刷 ${activeBrushStroke.count} 個表層網格；內部濕氣保留，持續供水仍須修源。`, 'good');
+        refreshUI();
+      }
+      activeBrushStroke = null;
+      ui.canvas.classList.remove('painting');
+    }
+
     function operateAtHit(hit) {
       if (!hit) return;
+      if (state.mode === 'paint') {
+        activeBrushStroke = { snapshot: engine.checkpoint(), paintedByDomain: new Map(), lastByDomain: new Map(), count: 0 };
+        applyBrushAtHit(hit, activeBrushStroke);
+        commitBrushStroke();
+        return;
+      }
       if (engine.state.tools.floorTestArmed) {
         if (state.verification?.active) return;
         if (hit.surface !== 'floor' || simulationControls.view.surface === 'slab') { showToast('請在室內地板表面選位。', 'warn'); return; }
@@ -1647,7 +1710,7 @@ import { connectEngine } from '../ui/engineBridge';
     }
 
     function beginInjection(port) {
-      if (state.scenario === 'crack' && state.material !== 'pu') { showToast('Scenario 01 目前只實作 PU，其他材料為 TODO。', 'warn'); return; }
+      if (state.scenario === 'crack' && state.material === 'epoxy' && state.crackState === 'moving') { showToast('Epoxy 僅示範用於已確認穩定、乾燥且接通的裂縫；活動裂縫請重新診斷。', 'warn'); return; }
       if (!port?.inserted) { showToast('這個孔位尚未塞入針頭。', 'warn'); return; }
       if (state.injection.active && state.injection.targetPort === port) { stopInjection(); return; }
       if (port.volume >= 1) { showToast('這個孔位已達示意填充上限，請進行驗證。'); return; }
@@ -1655,14 +1718,17 @@ import { connectEngine } from '../ui/engineBridge';
         showToast('同一孔位保留已注入材料；請選回原材料或改用新孔位。', 'warn'); return;
       }
       stopInjection(false);
+      const checkpoint = engine.checkpoint();
+      if (state.scenario === 'crack' && !startInjection(engine.state, port.id, state.material)) {
+        showToast(state.material === 'epoxy' ? '此孔未接通裂縫、含水過高或水壓偏高；Epoxy 需要乾燥、低壓且穩定的已連通裂縫。' : state.material === 'acrylate' ? '此孔未接通水路或含水不足；凝膠需進入潮濕的細微通道。' : '目前孔位條件不符合此材料的示範範圍。', 'warn');
+        return;
+      }
       const oldVolume = port.volume;
       const oldMaterial = port.material;
-      remember(`孔位 #${port.id} 本次注入`, () => { port.volume = oldVolume; port.material = oldMaterial; });
+      remember(`孔位 #${port.id} 本次注入`, () => { port.volume = oldVolume; port.material = oldMaterial; }, checkpoint);
       captureRepairBaseline();
-      port.material = state.material;
       state.selectedPort = port;
       state.injection.targetPort = port;
-      if (state.scenario === 'crack' && !startInjection(engine.state, port.id)) return;
       state.injection.active = true;
       setRunning(true);
       addLog(`孔位 #${port.id} 開始注入 ${materialProfiles[port.material].label}。`, port.hitPath ? 'good' : 'warn');
@@ -1690,14 +1756,14 @@ import { connectEngine } from '../ui/engineBridge';
       if (state.verification?.active) return;
       if (engine.state.floorTests.some(test => test.remainingSeconds > 0)) { showToast('請等待地板淋水測試結束，再比較來源修繕結果。', 'warn'); return; }
       stopInjection(false);
-      if (isBathroomScenario(state.scenario)) {
-        if (engine.state.repairs.job || !bathroomSupplyActive(engine.state)) { showToast('請完成施工並恢復用水／開閥，再驗證持續供水下的結果。', 'warn'); return; }
+      if (isCellularScenario(state.scenario) && state.scenario !== 'crack') {
+        if (engine.state.repairs.job || !bathroomSupplyActive(engine.state)) { showToast('請完成施工並恢復用水／供水壓力（與修繕前相同），再驗證持續供水下的結果。', 'warn'); return; }
         if (state.repairBaseline && state.repairBaseline.supply !== bathroomSupplyKey(engine.state)) { showToast('請恢復修繕前相同的用水與供水壓力，才能比較修復成效。', 'warn'); return; }
       }
       const baseline = state.repairBaseline || { leak: state.leakRate, moisture: state.wallMoisture, rain: state.rain, wind: state.wind, origin: '本次觀察起點' };
       state.verification = { active: true, elapsed: 0, duration: isCellularScenario(state.scenario) ? 120 : 20, baseline, result: null, rain: state.rain, wind: state.wind };
       setRunning(true);
-      addLog(`開始驗證：固定${isBathroomScenario(state.scenario) ? '浴室用水／供水壓力' : '雨勢與側風'}，觀察 ${state.verification.duration} 秒模擬時間。`);
+      addLog(`開始驗證：固定${isCellularScenario(state.scenario) && state.scenario !== 'crack' ? '用水／供水／地下水壓力' : '雨勢與側風'}，觀察 ${state.verification.duration} 秒模擬時間。`);
       refreshUI();
     }
 
@@ -1771,10 +1837,12 @@ import { connectEngine } from '../ui/engineBridge';
     let nextAction = null;
     let portListSignature = '';
     const modeButtons = $$('#modeButtons button');
-    const modeOrder = ['inspect', 'drill', 'insert', 'inject', 'verify'];
+    const modeOrder = ['inspect', 'drill', 'insert', 'inject', 'verify', 'paint'];
 
     function canEnterMode(mode) {
+      if (mode === 'paint') return isCellularScenario(state.scenario);
       if (isBathroomScenario(state.scenario)) return ['inspect', 'verify'].includes(mode);
+      if (isCellularScenario(state.scenario) && state.scenario !== 'crack') return ['inspect', 'verify', 'paint'].includes(mode);
       return mode === 'insert' ? state.ports.length > 0 : mode === 'inject' ? state.ports.some((port) => port.inserted) : modeOrder.includes(mode);
     }
 
@@ -1794,7 +1862,8 @@ import { connectEngine } from '../ui/engineBridge';
       const filled = state.ports.filter((port) => port.volume > 0).length;
       const samples = Number(!!state.samples.control) + Number(!!state.samples.suspect);
       ui.workflowSummary.textContent = `量測 ${samples}/2 · 孔位 ${state.ports.length} · 塞針 ${inserted} · 注入 ${filled}`;
-      const completed = { inspect: samples === 2, drill: state.ports.length > 0, insert: inserted > 0, inject: filled > 0 && !state.injection.active, verify: !!state.verification?.result };
+      const coated = [engine.state.wall, engine.state.slab, engine.state.floor].some(grid => grid?.cells.some(cell => cell.surfaceCoating > .02));
+      const completed = { inspect: samples === 2, drill: state.ports.length > 0, insert: inserted > 0, inject: filled > 0 && !state.injection.active, verify: !!state.verification?.result, paint: coated };
       modeButtons.forEach((button) => {
         const mode = button.dataset.mode;
         button.classList.toggle('active', mode === state.mode);
@@ -1816,8 +1885,10 @@ import { connectEngine } from '../ui/engineBridge';
       if (state.mode === 'inspect') {
         title = samples < 2 ? (state.sampleTarget === 'control' ? '01 · 建立基準濕度點' : '01 · 量測可疑濕區') : '01 · 量測已記錄';
         detail = '移動預覽濕度 · 點擊固定讀值 · 拖曳旋轉 · 滾輪／雙指縮放';
-        label = samples < 2 ? '點擊場景量測' : state.scenario === 'crack' ? '前往鑽孔' : '修繕源頭';
-        if (samples === 2) nextAction = state.scenario === 'crack' ? () => setMode('drill') : () => { sourceRepair(); setMode('verify'); };
+        label = samples < 2 ? '點擊場景量測' : state.scenario === 'crack' ? '前往鑽孔' : isCellularScenario(state.scenario) ? '查看供水與源頭修繕' : '修繕源頭';
+        if (samples === 2) nextAction = state.scenario === 'crack' ? () => setMode('drill')
+          : isCellularScenario(state.scenario) ? () => document.getElementById(isBathroomScenario(state.scenario) ? 'bathroomPanel' : 'diagnosticScenarioPanel').scrollIntoView({ block: 'center', behavior: 'smooth' })
+            : () => { sourceRepair(); setMode('verify'); };
       } else if (state.mode === 'drill') {
         title = `02 · 已建立 ${state.ports.length} 個孔位`;
         detail = state.scenario === 'crack' ? '鑽孔需 2 秒模擬時間；正常模式不透露內部連通性。可開啟 DEBUG 檢查。' : '黃色：接觸水路 · 紅色：偏離水路 · 可用剖面與撤銷調整';
@@ -1835,17 +1906,22 @@ import { connectEngine } from '../ui/engineBridge';
         progress = port?.volume ?? 0;
         label = state.injection.active ? '注入中' : !port ? '請選擇孔位' : !port.inserted ? '先固定針頭' : port.volume >= 1 ? '前往驗證' : `開始注入 #${port.id}`;
         if (!state.injection.active && port) nextAction = !port.inserted ? () => setMode('insert') : port.volume >= 1 ? () => setMode('verify') : () => beginInjection(port);
+      } else if (state.mode === 'paint') {
+        title = '表面防水塗刷';
+        detail = '按住左鍵在可施工牆面、樓板或室內地板拖曳；每格塗層會依實際表面位置減少入水。塗刷不會封堵暗管或地下水來源。';
+        label = '返回檢測';
+        nextAction = () => setMode('inspect');
       } else {
         const verification = state.verification;
         title = testing ? `05 · 驗證 ${Math.floor(verification.elapsed)} / ${verification.duration} 秒` : verification?.result ? '05 · 驗證完成' : '05 · 觀察修繕後的變化';
-        detail = `測試期間固定${isBathroomScenario(state.scenario) ? '浴室用水／供水壓力' : '雨勢與側風'}；${isCellularScenario(state.scenario) ? 120 : 20} 秒模擬時間後保留前後數值。`;
+        detail = `測試期間固定${isCellularScenario(state.scenario) && state.scenario !== 'crack' ? '目前供水／地下水壓力' : '雨勢與側風'}；${isCellularScenario(state.scenario) ? 120 : 20} 秒模擬時間後保留前後數值。`;
         progress = verification ? verification.elapsed / verification.duration : 0;
         label = testing ? (state.running ? '觀察中' : '已暫停') : verification?.result ? '重新驗證' : `開始 ${isCellularScenario(state.scenario) ? 120 : 20} 秒驗證`;
         if (!testing) nextAction = startVerification;
       }
-      if (isBathroomScenario(state.scenario) && state.mode === 'inspect') {
-        label = '查看供水與源頭修繕'; nextAction = () => document.getElementById('bathroomPanel').scrollIntoView({ block: 'center', behavior: 'smooth' });
-        detail += ' · 完成量測後，使用左側浴室供水與修繕控制。';
+      if (state.scenario !== 'crack' && isCellularScenario(state.scenario) && state.mode === 'inspect') {
+        label = '查看供水與源頭修繕'; nextAction = () => document.getElementById(isBathroomScenario(state.scenario) ? 'bathroomPanel' : 'diagnosticScenarioPanel').scrollIntoView({ block: 'center', behavior: 'smooth' });
+        detail += ' · 完成量測後，使用左側情境控制。';
       }
       ui.operationTitle.textContent = title;
       ui.operationDetail.textContent = detail;
@@ -1869,14 +1945,10 @@ import { connectEngine } from '../ui/engineBridge';
           button.setAttribute('aria-pressed', String(item === port));
         });
       }
+      ui.crackStateField.hidden = state.scenario !== 'crack';
+      [...ui.materialSelect.options].forEach(option => { option.disabled = false; option.textContent = option.textContent.replace(' · TODO', ''); });
       if (state.scenario === 'crack') {
         if (state.mode === 'insert' && port && !port.drilled) { ui.nextStepBtn.disabled = true; ui.operationDetail.textContent = '鑽孔中，請讓時間前進至完成。'; }
-        ui.crackStateField.hidden = true;
-        [...ui.materialSelect.options].forEach(option => { option.disabled = option.value !== 'pu';
-          if (option.value !== 'pu' && !option.textContent.includes('TODO')) option.textContent += ' · TODO'; });
-      } else {
-        ui.crackStateField.hidden = false;
-        [...ui.materialSelect.options].forEach(option => { option.disabled = false; option.textContent = option.textContent.replace(' · TODO', ''); });
       }
       renderVerification();
     }
@@ -1905,7 +1977,12 @@ import { connectEngine } from '../ui/engineBridge';
       floorControls.update(!!state.verification?.active, isCellularScenario(state.scenario));
       floorSurface?.update(simulationControls.view.surface !== 'slab', state.cutaway && simulationControls.view.surface === 'floor');
       bathroomControls.update(isBathroomScenario(state.scenario), !!state.verification?.active);
-      if (bathroomScene?.update(engine.state, isBathroomScenario(state.scenario), simulationControls.view.surface, state.cutaway || simulationControls.view.debug)) indexInteractionSurfaces();
+      if (bathroomScene?.update(engine.state, isCellularScenario(state.scenario), simulationControls.view.surface, state.cutaway || simulationControls.view.debug)) indexInteractionSurfaces();
+      diagnosticControls.update(['drain', 'multi', 'basement'].includes(state.scenario), !!state.verification?.active);
+      const migratedNonCrack = isCellularScenario(state.scenario) && state.scenario !== 'crack';
+      for (const id of ['rainSlider', 'rainColorPicker', 'windSlider']) $( `#${id}` ).closest('.field').hidden = migratedNonCrack;
+      ui.portList.closest('.section').hidden = migratedNonCrack;
+      ui.materialSelect.closest('.field').hidden = migratedNonCrack;
       updatePorts();
       updateMetrics();
       updateDiagnosis();
@@ -2103,6 +2180,7 @@ import { connectEngine } from '../ui/engineBridge';
     });
 
     function cancelGestures() {
+      commitBrushStroke();
       const captured = [...gestures.pointers.keys()];
       gestures.pointers.clear();
       gestures.primary = null;
@@ -2112,6 +2190,7 @@ import { connectEngine } from '../ui/engineBridge';
       orbit.dragging = false;
       captured.forEach((id) => { if (ui.canvas.hasPointerCapture(id)) ui.canvas.releasePointerCapture(id); });
       ui.canvas.classList.remove('dragging');
+      ui.canvas.classList.remove('painting');
       hideToolCursor();
     }
 
@@ -2124,6 +2203,7 @@ import { connectEngine } from '../ui/engineBridge';
         gestures.primary = { id: event.pointerId, x: event.clientX, y: event.clientY, lastX: event.clientX, lastY: event.clientY, button: event.button };
         gestures.moved = false;
         gestures.multi = false;
+        if (state.mode === 'paint' && event.button === 0) activeBrushStroke = { snapshot: engine.checkpoint(), paintedByDomain: new Map(), lastByDomain: new Map(), count: 0 };
       } else {
         gestures.multi = true;
         gestures.moved = true;
@@ -2151,6 +2231,14 @@ import { connectEngine } from '../ui/engineBridge';
       const threshold = event.pointerType === 'touch' ? 10 : 6;
       // 超過門檻才開始旋轉；點擊抖動不改視角，拖曳放開不觸發鑽孔。
       if (!gestures.moved && Math.hypot(event.clientX - p.x, event.clientY - p.y) < threshold) return;
+      if (state.mode === 'paint' && p.button === 0 && activeBrushStroke) {
+        gestures.moved = true;
+        ui.canvas.classList.add('painting');
+        const hit = getIntersection(event);
+        updateToolCursorFromHit(hit);
+        applyBrushAtHit(hit, activeBrushStroke);
+        return;
+      }
       gestures.moved = true;
       orbit.dragging = true;
       ui.canvas.classList.add('dragging');
@@ -2171,7 +2259,8 @@ import { connectEngine } from '../ui/engineBridge';
     });
     ui.canvas.addEventListener('pointerup', (event) => {
       if (!gestures.pointers.has(event.pointerId)) return;
-      const shouldOperate = !gestures.moved && !gestures.multi && gestures.primary?.id === event.pointerId && event.button === 0;
+      const wasMoved = gestures.moved;
+      const shouldOperate = !wasMoved && !gestures.multi && gestures.primary?.id === event.pointerId && event.button === 0;
       const hit = shouldOperate ? getIntersection(event) : null;
       gestures.pointers.delete(event.pointerId);
       if (ui.canvas.hasPointerCapture(event.pointerId)) ui.canvas.releasePointerCapture(event.pointerId);
@@ -2182,7 +2271,10 @@ import { connectEngine } from '../ui/engineBridge';
         orbit.dragging = false;
         ui.canvas.classList.remove('dragging');
       }
-      if (shouldOperate) operateAtHit(hit);
+      if (activeBrushStroke) {
+        if (shouldOperate) applyBrushAtHit(hit, activeBrushStroke);
+        commitBrushStroke();
+      } else if (shouldOperate) operateAtHit(hit);
       if (event.pointerType !== 'touch') gestures.hover = { clientX: event.clientX, clientY: event.clientY, pointerType: event.pointerType };
     });
     ui.canvas.addEventListener('pointercancel', cancelGestures);
@@ -2210,7 +2302,7 @@ import { connectEngine } from '../ui/engineBridge';
       if (event.key === 'Escape') { stopInjection(); cancelGestures(); refreshUI(); return; }
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') { event.preventDefault(); undoLastAction(); return; }
       if (event.ctrlKey || event.metaKey || event.altKey) return;
-      if (/^[1-5]$/.test(event.key)) { event.preventDefault(); setMode(modeOrder[Number(event.key) - 1]); }
+      if (/^[1-6]$/.test(event.key)) { event.preventDefault(); setMode(modeOrder[Number(event.key) - 1]); }
       if (event.key === ' ' && !event.target.closest('button')) { event.preventDefault(); setRunning(!state.running); refreshUI(); }
       if (event.key.toLowerCase() === 'c') toggleCutaway();
       if (event.key.toLowerCase() === 'r') setView('home');
@@ -2228,7 +2320,7 @@ import { connectEngine } from '../ui/engineBridge';
     updateCamera();
     refreshUI();
     setScenario('crack', true);
-    addLog('Scenario 01 從 8% 乾牆開始。使用 20× 觀察雨水進入後，量測濕區與乾區。');
+    addLog('從 8% 乾牆開始。使用 20× 觀察雨水進入後，量測濕區與乾區。');
     addLog('提示：拖曳旋轉場景，滾輪縮放，點擊牆面執行目前工具。');
 
     if (import.meta.env.DEV && new URLSearchParams(location.search).has('test')) {

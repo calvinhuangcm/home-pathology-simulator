@@ -6,22 +6,36 @@ export function startBathroomRepair(s: SimulationState, kind: RepairKind, domain
   if (s.repairs.job) return { ok: false, message: '請先等目前修繕完成。' };
   let cells: number[] = [];
   if (kind === 'waterproof') {
-    if (s.scenarioId !== 'bathroom') return { ok: false, message: '管線破損不會因重作防水而修復。' };
-    if (s.environment.bathroomUse > 0) return { ok: false, message: '請先停止淋浴／地坪用水，再進行防水層修復。' };
+    if (s.scenarioId === 'bathroom' || s.scenarioId === 'multi') {
+      if (s.environment.bathroomUse > 0) return { ok: false, message: '請先停止浴室用水，再進行迎水側防水層修復。' };
+      domain = 'slab';
+    } else if (s.scenarioId === 'basement') {
+      if (s.environment.groundwaterPressure > 0) return { ok: false, message: '負水壓仍在作用。先解除示範水壓，再修復迎水側缺損。' };
+      domain = 'wall';
+    } else return { ok: false, message: '管線破損不會因重作防水而修復。' };
     if (s.repairs.waterproofRepaired) return { ok: false, message: '防水層已修復，請恢復用水驗證。' };
-    domain = 'slab'; cells = s.waterSources.flatMap(source => source.defects);
+    cells = s.waterSources.filter(source => source.kind === 'area' || source.kind === 'groundwater').flatMap(source => source.defects);
   } else if (kind === 'bypass') {
     if (s.scenarioId !== 'hotpipe') return { ok: false, message: '本案例的來源是防水層，改管無法解決。' };
     if (s.environment.pipeValveOpen) return { ok: false, message: '請先關閉熱水供水閥，再隔離舊管與安裝明管。' };
     if (s.repairs.bypassInstalled) return { ok: false, message: '明管已接妥，請重新開閥驗證。' };
+  } else if (kind === 'drain') {
+    if (s.scenarioId !== 'drain' && s.scenarioId !== 'multi') return { ok: false, message: '目前情境沒有破損排水管來源。' };
+    if (s.environment.drainUse > 0) return { ok: false, message: '請先停止排水使用，再修復破損排水管。' };
+    if (s.repairs.drainRepaired) return { ok: false, message: '排水管已修復，請恢復排水驗證。' };
   } else {
     const wall = s[domain];
     if (!wall) return { ok: false, message: '此案例沒有該觀察表面。' };
     cells = wall.cells.slice(0, wall.cols * wall.rows).flatMap((c, i) => c.moisture > 15 || c.damageLevel > .01 || c.saltLevel > .01 ? [i] : []);
     if (!cells.length) return { ok: false, message: '目前表面沒有濕損區可清理／重塗；先觀察用水後的變化。' };
   }
-  s.repairs.job = { kind, domain, cells, elapsed: 0, duration: kind === 'surface' ? 2 : kind === 'bypass' ? 10 : 15 };
-  return { ok: true, message: kind === 'surface' ? '清理並重塗目前濕損區；不改變水源、內部水分與防水層。' : kind === 'bypass' ? '隔離舊管並接通新的外露管路。' : '重作失效防水層及牆地交界。教學作業時間已壓縮。' };
+  s.repairs.job = { kind, domain, cells, elapsed: 0, duration: kind === 'surface' ? 2 : kind === 'bypass' ? 10 : kind === 'drain' ? 12 : 15 };
+  const message = kind === 'surface' ? '清理並重塗目前濕損區；不改變水源、內部水分與防水層。'
+    : kind === 'bypass' ? '隔離舊給水管並接通新的外露管路。'
+      : kind === 'drain' ? '局部修復排水管破損；只有排水使用停止時才施工。'
+        : s.scenarioId === 'basement' ? '修復負水壓迎水側的防水缺損；示範水壓解除後才可施工。'
+          : '重作失效防水層及牆地交界。教學作業時間已壓縮。';
+  return { ok: true, message };
 }
 
 export function setBathroomSupply(s: SimulationState, control: 'use' | 'valve' | 'pressure', value: number): ActionResult {
@@ -34,20 +48,42 @@ export function setBathroomSupply(s: SimulationState, control: 'use' | 'valve' |
   return { ok: true, message: '供水條件已更新。' };
 }
 
+export function setDrainUse(s: SimulationState, value: number): ActionResult {
+  if (!Number.isFinite(value)) return { ok: false, message: '排水使用數值無效。' };
+  if (s.repairs.job?.kind === 'drain' && value > 0) return { ok: false, message: '排水管修復作業中，請等待完成後再排水。' };
+  s.environment.drainUse = Math.max(0, Math.min(1, value));
+  return { ok: true, message: '排水使用條件已更新。' };
+}
+
+export function setGroundwaterPressure(s: SimulationState, value: number): ActionResult {
+  if (!Number.isFinite(value)) return { ok: false, message: '地下水壓力數值無效。' };
+  if (s.repairs.job?.kind === 'waterproof' && s.scenarioId === 'basement' && value > 0) return { ok: false, message: '迎水側防水修復中，請等待完成後再恢復水壓。' };
+  s.environment.groundwaterPressure = Math.max(0, Math.min(.8, value));
+  return { ok: true, message: '地下水壓力條件已更新。' };
+}
+
 export function updateBathroomRepairs(s: SimulationState, dt: number): void {
   const job = s.repairs.job;
   if (!job) return;
   // Defensive guard for imported snapshots: unsafe supply does not progress work.
-  if (job.kind === 'bypass' && s.environment.pipeValveOpen || job.kind === 'waterproof' && s.environment.bathroomUse > 0) return;
+  if (job.kind === 'bypass' && s.environment.pipeValveOpen
+    || job.kind === 'waterproof' && (s.scenarioId === 'basement' ? s.environment.groundwaterPressure > 0 : s.environment.bathroomUse > 0)
+    || job.kind === 'drain' && s.environment.drainUse > 0) return;
   job.elapsed = Math.min(job.duration, job.elapsed + dt);
   if (job.elapsed + 1e-8 < job.duration) return;
-  if (job.kind === 'waterproof' && s.slab) {
-    for (const i of job.cells) s.slab.cells[i].waterproofLevel = 1;
+  if (job.kind === 'waterproof') {
+    const grid = s[job.domain];
+    if (grid) for (const i of job.cells) grid.cells[i].waterproofLevel = 1;
     s.repairs.waterproofRepaired = true;
   } else if (job.kind === 'bypass') {
-    for (const pipe of s.pipes) pipe.isolated = true;
-    s.pipes.push({ id: 'new-exposed-hot', cells: [], route: [{ x: 3.625, y: .625 }, { x: 3.625, y: 4.375 }, { x: .625, y: 4.375 }, { x: .625, y: 3.375 }], leaking: false, isolated: false, exposed: true, pressure: 0 });
+    for (const pipe of s.pipes) if (pipe.service === 'supply') pipe.isolated = true;
+    s.pipes.push({ id: 'new-exposed-hot', cells: [], route: [{ x: 3.625, y: .625 }, { x: 3.625, y: 4.375 }, { x: .625, y: 4.375 }, { x: .625, y: 3.375 }], leaking: false, isolated: false, exposed: true, pressure: 0, service: 'supply', waterTemperatureC: 48 });
     s.repairs.bypassInstalled = true;
+  } else if (job.kind === 'drain') {
+    for (const pipe of s.pipes) if (pipe.service === 'drain' && pipe.leaking) pipe.isolated = true;
+    const old = s.pipes.find(pipe => pipe.service === 'drain');
+    if (old) s.pipes.push({ id: 'repaired-exposed-drain', cells: [], route: old.route, leaking: false, isolated: false, exposed: true, pressure: 0, service: 'drain', waterTemperatureC: s.environment.ambientTemperatureC });
+    s.repairs.drainRepaired = true;
   } else if (job.kind === 'surface') {
     const wall = s[job.domain];
     if (wall) for (const i of job.cells) {

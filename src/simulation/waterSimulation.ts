@@ -4,7 +4,11 @@ import { clamp, conductivity } from './wallModel';
 
 export function permeability(cell: WallCell): number {
   const base = cell.crackLevel > 0 ? 2.8 : cell.material === 'waterproof' ? .0001 + (1 - cell.waterproofLevel) * .8 : conductivity[cell.material];
-  return base * cell.permeabilityScale * (1 - clamp(cell.expansion * 1.9, 0, .985)) * (1 - cell.surfaceCoating * .85);
+  return base * cell.permeabilityScale
+    * (1 - clamp(cell.expansion * 1.9, 0, .985))
+    * (1 - clamp(cell.epoxyBond * .92, 0, .92))
+    * (1 - clamp(cell.gelSeal * .82, 0, .82))
+    * (1 - cell.surfaceCoating * .85);
 }
 const harmonic = (a: number, b: number): number => 2 * a * b / Math.max(.00001, a + b);
 function transport(grid: WallModel, dt: number, delta: Float64Array, defects: Set<number>, gravity: -1 | 0 | 1 = 0, dryingRates?: number[]): { flow: number; reference: number } {
@@ -61,27 +65,43 @@ export function updateWater(state: SimulationState, dt: number, delta: Float64Ar
     b.moisture = clamp(b.moisture + flow * dt, 8, 100);
     a.flowY += flow; b.flowY += flow;
   }
-  for (const pipe of state.pipes) pipe.pressure = state.environment.pipeValveOpen && !pipe.isolated ? state.environment.pipePressure : 0;
+  for (const pipe of state.pipes) pipe.pressure = pipe.service === 'supply' && state.environment.pipeValveOpen && !pipe.isolated ? state.environment.pipePressure : 0;
   for (const source of state.waterSources) {
     const grid = state[source.domain];
     if (!grid) continue;
     if (source.kind === 'area') {
       const input = source.enabled ? state.environment.bathroomUse : 0;
-      for (const i of source.footprint) grid.cells[i].moisture = Math.min(100, grid.cells[i].moisture + input * 12 * dt);
+      for (const i of source.footprint) {
+        const surface = grid.cells[i];
+        surface.moisture = Math.min(100, surface.moisture + input * 12 * (1 - surface.surfaceCoating * .85) * dt);
+      }
       source.flow = slabFlux?.flow ?? 0;
       source.unsealedFlow = slabFlux?.reference ?? 0;
     } else if (source.kind === 'pipe') {
       const pipe = state.pipes.find(p => p.id === source.pipeId);
-      source.unsealedFlow = source.enabled && state.environment.pipeValveOpen ? state.environment.pipePressure / .4 : 0;
+      source.unsealedFlow = source.enabled && pipe?.service === 'supply' && state.environment.pipeValveOpen ? state.environment.pipePressure / .4 : 0;
       source.flow = pipe?.leaking && !pipe.isolated ? source.unsealedFlow : 0;
       grid.cells[source.cell].moisture = Math.min(100, grid.cells[source.cell].moisture + source.flow * 160 * dt);
+    } else if (source.kind === 'drain') {
+      const pipe = state.pipes.find(p => p.id === source.pipeId);
+      source.unsealedFlow = source.enabled && state.environment.drainUse > 0 ? state.environment.drainUse : 0;
+      source.flow = pipe?.leaking && !pipe.isolated ? source.unsealedFlow * (pipe.service === 'drain' ? 1 : 0) : 0;
+      grid.cells[source.cell].moisture = Math.min(100, grid.cells[source.cell].moisture + source.flow * 125 * dt);
+    } else if (source.kind === 'groundwater') {
+      const barrier = grid.cells[source.cell];
+      source.unsealedFlow = source.enabled ? state.environment.groundwaterPressure : 0;
+      source.flow = source.unsealedFlow * permeability(barrier) * .86;
+      grid.cells[source.cell].moisture = Math.min(100, barrier.moisture + source.flow * 125 * dt);
     } else {
-      const resistance = state.cracks.reduce((total, i) => total + 2.8 / permeability(grid.cells[i]), 0) / state.cracks.length;
+      const resistance = state.cracks.length ? state.cracks.reduce((total, i) => total + 2.8 / permeability(grid.cells[i]), 0) / state.cracks.length : Infinity;
       source.unsealedFlow = source.enabled ? state.environment.rain * (1 + state.environment.wind * .4) : 0;
       source.flow = source.unsealedFlow / resistance;
       grid.cells[source.cell].moisture = Math.min(100, grid.cells[source.cell].moisture + source.flow * 160 * dt);
     }
   }
-  const pressure = state.scenarioId === 'crack' ? state.environment.rain * (1 + state.environment.wind * .4) : state.scenarioId === 'hotpipe' ? Math.max(0, ...state.pipes.filter(p => p.leaking).map(p => p.pressure)) : state.environment.bathroomUse * .1;
+  const pressure = state.scenarioId === 'crack' ? state.environment.rain * (1 + state.environment.wind * .4)
+    : state.scenarioId === 'hotpipe' ? Math.max(0, ...state.pipes.filter(p => p.leaking).map(p => p.pressure))
+      : state.scenarioId === 'basement' ? state.environment.groundwaterPressure
+        : Math.max(state.environment.bathroomUse, state.environment.drainUse, state.environment.pipeValveOpen ? state.environment.pipePressure : 0) * .1;
   for (const grid of [state.wall, state.slab, state.floor]) if (grid) for (const cell of grid.cells) cell.waterPressure = (cell.moisture - 8) / 92 * pressure;
 }

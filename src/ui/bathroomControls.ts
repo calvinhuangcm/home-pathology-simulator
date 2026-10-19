@@ -3,12 +3,23 @@ import type { FieldView } from '../renderer/moistureField';
 import type { RepairKind, SimulationState } from '../simulation/types';
 import { setBathroomSupply, startBathroomRepair } from '../simulation/bathroomRepairs';
 
-export const bathroomSupplyKey = (s: SimulationState): string => s.scenarioId === 'bathroom' ? `use:${s.environment.bathroomUse}` : `valve:${s.environment.pipeValveOpen}:pressure:${s.environment.pipePressure}`;
-export const bathroomSupplyActive = (s: SimulationState): boolean => s.scenarioId === 'bathroom' ? s.environment.bathroomUse > 0 : s.environment.pipeValveOpen && s.environment.pipePressure > 0;
+export const bathroomSupplyKey = (s: SimulationState): string => {
+  if (s.scenarioId === 'bathroom') return `use:${s.environment.bathroomUse}`;
+  if (s.scenarioId === 'hotpipe') return `valve:${s.environment.pipeValveOpen}:pressure:${s.environment.pipePressure}`;
+  if (s.scenarioId === 'drain') return `drain:${s.environment.drainUse}`;
+  if (s.scenarioId === 'multi') return `bathroom:${s.environment.bathroomUse}:drain:${s.environment.drainUse}`;
+  if (s.scenarioId === 'basement') return `groundwater:${s.environment.groundwaterPressure}`;
+  return `rain:${s.environment.rain}:wind:${s.environment.wind}`;
+};
+export const bathroomSupplyActive = (s: SimulationState): boolean => s.scenarioId === 'bathroom' ? s.environment.bathroomUse > 0
+  : s.scenarioId === 'hotpipe' ? s.environment.pipeValveOpen && s.environment.pipePressure > 0
+    : s.scenarioId === 'drain' ? s.environment.drainUse > 0
+      : s.scenarioId === 'multi' ? s.environment.bathroomUse > 0 || s.environment.drainUse > 0
+        : s.scenarioId === 'basement' ? s.environment.groundwaterPressure > 0 : s.environment.rain > 0;
 interface Hooks { notify(message: string, type?: string): void; beforeChange(kind: 'stop' | 'repair'): void; changed(): void; changeView(): void; remember(snapshot: SimulationState): void }
 export function createBathroomControls(engine: SimulationEngine, view: FieldView, hooks: Hooks) {
   const panel = document.createElement('section'); panel.className = 'section'; panel.id = 'bathroomPanel'; panel.hidden = true;
-  panel.innerHTML = `<div class="section-title"><h2>浴室 · 供水與源頭修繕</h2><span>Scenario 02</span></div>
+  panel.innerHTML = `<div class="section-title"><h2>浴室 · 供水與源頭修繕</h2><span>源頭修復</span></div>
     <p class="hint" id="bathroomExplanation"></p>
     <div class="field" id="bathroomSurfaceField"><label for="bathroomSurface">觀察位置（不同房間）</label><select id="bathroomSurface"><option value="wall">相鄰房間 · 浴室外側牆腳</option><option value="floor">相鄰房間 · 室內地板</option><option value="slab">樓下房間 · 天花底面</option></select></div>
     <label class="debug-toggle"><input id="bathroomUse" type="checkbox" checked> 淋浴／地坪用水</label>
@@ -52,7 +63,7 @@ export function createBathroomControls(engine: SimulationEngine, view: FieldView
       document.getElementById('materialSelect')!.closest<HTMLElement>('.field')!.hidden = active;
       if (!active) return;
       const s = engine.state, floor = s.scenarioId === 'bathroom', job = s.repairs.job;
-      get('bathroomExplanation').textContent = floor ? '02A：地坪面狀用水 → 防水破口 → 樓板內移動 → 樓下天花／相鄰牆腳。兩個觀察位置共用這組實際水路。' : '02B：老舊熱水暗管破損。停止淋浴仍可能維持管內壓力；關閉供水與隔離破管才會停止持續入水。';
+      get('bathroomExplanation').textContent = floor ? '地坪面狀用水 → 防水破口 → 樓板內移動 → 樓下天花／相鄰牆腳。兩個觀察位置共用這組實際水路。' : '老舊熱水暗管破損。停止淋浴仍可能維持管內壓力；關閉供水與隔離破管才會停止持續入水。';
       get('bathroomSurfaceField').hidden = !floor;
       get<HTMLSelectElement>('bathroomSurface').value = view.surface;
       get('hotPipeSupply').hidden = floor;
@@ -66,7 +77,7 @@ export function createBathroomControls(engine: SimulationEngine, view: FieldView
       get<HTMLInputElement>('bathroomUse').disabled = verifying || job?.kind === 'waterproof';
       get<HTMLInputElement>('pipeValve').disabled = verifying || job?.kind === 'bypass';
       get<HTMLInputElement>('pipePressure').disabled = verifying || job?.kind === 'bypass';
-      get('bathroomRepairStatus').textContent = job ? `${{ surface: '表面整修', waterproof: '防水重作', bypass: '舊管隔離與明管安裝' }[job.kind]} · ${job.elapsed.toFixed(1)} / ${job.duration}s${s.running && s.timeScale > 0 ? '' : ' · 已暫停'}` : `表面整修 ${s.repairs.surfacePatchCount} 次 · ${floor ? s.repairs.waterproofRepaired ? '防水層已重作' : '防水層尚未重作' : s.repairs.bypassInstalled ? '舊管已隔離／明管已接通' : '暗管尚未更換'}`;
+      get('bathroomRepairStatus').textContent = job ? `${{ surface: '表面整修', waterproof: '防水重作', bypass: '舊管隔離與明管安裝', drain: '排水管修復' }[job.kind]} · ${job.elapsed.toFixed(1)} / ${job.duration}s${s.running && s.timeScale > 0 ? '' : ' · 已暫停'}` : `表面整修 ${s.repairs.surfacePatchCount} 次 · ${floor ? s.repairs.waterproofRepaired ? '防水層已重作' : '防水層尚未重作' : s.repairs.bypassInstalled ? '舊管已隔離／明管已接通' : '暗管尚未更換'}`;
       get<HTMLProgressElement>('bathroomRepairProgress').hidden = !job;
       get<HTMLProgressElement>('bathroomRepairProgress').value = job ? job.elapsed / job.duration : 0;
     },

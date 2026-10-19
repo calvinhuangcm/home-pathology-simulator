@@ -10,10 +10,11 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint src tests",
     "test": "tsx --test tests/*.test.ts",
-    "test:browser": "node tests/browser.mjs && node tests/bathroom-browser.mjs && node tests/rendering-browser.mjs && node tests/floor-browser.mjs",
+    "test:browser": "node tests/browser.mjs && node tests/bathroom-browser.mjs && node tests/rendering-browser.mjs && node tests/floor-browser.mjs && node tests/diagnostic-browser.mjs",
     "test:browser:bathroom": "node tests/bathroom-browser.mjs",
     "test:browser:rendering": "node tests/rendering-browser.mjs",
-    "test:browser:floor": "node tests/floor-browser.mjs"
+    "test:browser:floor": "node tests/floor-browser.mjs",
+    "test:browser:diagnostic": "node tests/diagnostic-browser.mjs"
   },
   "devDependencies": {
     "vite": "^7.1.0",

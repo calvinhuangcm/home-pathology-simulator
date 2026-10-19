@@ -2,7 +2,7 @@ import { createExteriorCrack } from './exteriorCrack';
 import { buildEdges, cellIndex, createWall, pointIndex } from '../simulation/wallModel';
 import type { ScenarioId, SimulationState } from '../simulation/types';
 
-export const isCellularScenario = (id: string): id is ScenarioId => ['crack', 'bathroom', 'hotpipe'].includes(id);
+export const isCellularScenario = (id: string): id is ScenarioId => ['crack', 'bathroom', 'hotpipe', 'drain', 'multi', 'basement'].includes(id);
 export const isBathroomScenario = (id: string): boolean => id === 'bathroom' || id === 'hotpipe';
 
 /** Two observation domains: adjacent-room wall and downstairs ceiling of the same wet floor. */
@@ -35,7 +35,7 @@ export function createBathroom(id: 'bathroom' | 'hotpipe'): SimulationState {
     const route = [{ x: 3.625, y: .625 }, { x: 3.625, y: 3.375 }, { x: .625, y: 3.375 }];
     const pipeCells = [];
     for (let x = 23; x <= 35; x++) pipeCells.push(cellIndex(s.wall, x, 13, 3));
-    s.pipes.push({ id: 'old-hot', route, cells: pipeCells, leaking: true, isolated: false, exposed: false, pressure: .4 });
+    s.pipes.push({ id: 'old-hot', route, cells: pipeCells, leaking: true, isolated: false, exposed: false, pressure: .4, service: 'supply', waterTemperatureC: 48 });
     const sourcePosition = { x: 1.625, y: 3.375 };
     // Leakage follows a mortar chase downwards, then diffuses to the finish.
     for (let y = 13; y >= 2; y--) {

@@ -1,14 +1,29 @@
 // Preserved scenario metadata; crack and bathroom cases are migrated to the cellular engine.
 export const scenarios = {
       bathroom: {
-        title: 'Scenario 02A · 浴室防水層失效', subtitle: '面狀用水 → 樓板滲透 → 樓下天花與相鄰牆腳',
+        title: '浴室防水層失效', subtitle: '面狀用水 → 樓板滲透 → 樓下天花與相鄰牆腳',
         color: 0x48d7ff, sourceLabel: '浴室防水層與牆地交界', sourceHint: '停止地坪用水，重作源頭防水，再恢復用水驗證。', sourceButton: '重作防水',
         truth: 'bathroom', baseMoisture: .08, baseEfflorescence: 0, baseMold: 0,
       },
       hotpipe: {
-        title: 'Scenario 02B · 老舊熱水暗管破損', subtitle: '帶壓暗管 → 牆內移動 → 牆腳濕損 → 隔離舊管／改明管',
+        title: '老舊熱水暗管破損', subtitle: '帶壓暗管 → 牆內移動 → 牆腳濕損 → 隔離舊管／改明管',
         color: 0xe8b783, sourceLabel: '牆內熱水供水管', sourceHint: '停止淋浴不會卸除供水壓力；先關閥，再隔離破損舊管並接通明管。', sourceButton: '隔離舊管／改明管',
         truth: 'hotpipe', baseMoisture: .08, baseEfflorescence: 0, baseMold: 0,
+      },
+      drain: {
+        title: '排水管破損', subtitle: '排水使用 → 管線裂口 → 牆內擴散 → 局部修管',
+        color: 0x55d6e6, sourceLabel: '牆內排水管破損', sourceHint: '排水問題依排水事件出現；先停排水，再定位與修復管線。', sourceButton: '檢查排水管',
+        truth: 'drain', baseMoisture: .08, baseEfflorescence: 0, baseMold: 0,
+      },
+      multi: {
+        title: '多重漏水', subtitle: '浴室防水失效 + 排水管破損 · 兩個來源獨立運作',
+        color: 0xf7c76a, sourceLabel: '浴室防水層與排水管', sourceHint: '面狀供水與排水管漏水同時發生，必須分別修復與驗證。', sourceButton: '檢查兩個來源',
+        truth: 'multi', baseMoisture: .08, baseEfflorescence: 0, baseMold: 0,
+      },
+      basement: {
+        title: '地下室負水壓', subtitle: '地下水壓 → 迎水側防水缺損 → 牆腳受潮',
+        color: 0x56a9d6, sourceLabel: '地下水與迎水側防水缺損', sourceHint: '受壓入水與牆面症狀可有距離；先辨識水壓與迎水面。', sourceButton: '檢查迎水側',
+        truth: 'basement', baseMoisture: .08, baseEfflorescence: 0, baseMold: 0,
       },
       window: {
         title: '窗框／窗台滲水',
@@ -24,7 +39,7 @@ export const scenarios = {
         pathType: 'window',
       },
       crack: {
-        title: 'Scenario 01 · 外牆裂縫滲水',
+        title: '外牆裂縫滲水',
         subtitle: '雨水 → RC 水路 → 室內濕區 → PU 止水 → 緩慢乾燥',
         color: 0xf7c76a,
         sourceLabel: '外牆裂縫／施工縫',
@@ -100,7 +115,7 @@ export const materialProfiles = {
       },
       acrylate: {
         label: '丙烯酸凝膠',
-        short: '細微通道、進階',
+        short: '潮濕細微通道、非結構',
         color: 0xbb9bff,
         spread: 1.2,
         structural: .2,
@@ -116,5 +131,6 @@ export const modeLabels = {
       insert: ['塞針模式', '靠近孔位會自動吸附，點擊固定針頭；也可使用右側孔位清單。'],
       inject: ['注入模式', '點擊已塞針孔位開始連續注入；再點一次、按 Esc 或停止鈕即可停止。'],
       verify: ['驗證模式', '在相同雨勢與側風下觀察 20 秒模擬時間，比較修繕前後趨勢。'],
+      paint: ['塗刷模式', '在可施工表面拖曳塗刷；塗層只影響對應表面傳輸，不會封堵持續漏水管線。'],
     };
 

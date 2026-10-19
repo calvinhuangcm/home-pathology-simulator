@@ -11,7 +11,7 @@ export function drill(state: SimulationState, position: Point): Port | null {
     if (d < distance) { nearest = i; distance = d; }
   }
   const connected = distance < .3;
-  const port = { id: state.repairs.nextId++, position: { ...position }, cell: connected ? nearest : pointIndex(state.wall, position, 3), connected, drillProgress: 0, inserted: false, volumeMl: 0 };
+  const port = { id: state.repairs.nextId++, position: { ...position }, cell: connected ? nearest : pointIndex(state.wall, position, 3), connected, material: null, drillProgress: 0, inserted: false, volumeMl: 0 };
   state.repairs.ports.push(port);
   return port;
 }

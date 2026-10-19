@@ -1,8 +1,9 @@
 import { FLOOR_SURFACE, floorLayerNames } from '../simulation/floorModel';
 import type { Domain, SimulationState } from '../simulation/types';
 import { cellIndex, clamp, gridPoint, layerNames } from '../simulation/wallModel';
+import { surfaceTemperatureC, thermalColor } from '../tools/thermalCamera';
 
-export interface FieldView { debug: boolean; mode: string; layer: number; cutaway: boolean; surface: Domain }
+export interface FieldView { debug: boolean; mode: string; layer: number; cutaway: boolean; surface: Domain; thermal: boolean }
 /** Canvas is only a projection of SimulationState, never a source for meter values. */
 export function createMoistureField(world: import('three').Group, domain: Domain = 'wall', anisotropy = 1) {
   const canvas = document.createElement('canvas');
@@ -29,14 +30,18 @@ export function createMoistureField(world: import('three').Group, domain: Domain
     if (!active) return;
     const wall = state[domain]!, size = 12;
     const inspecting = view.surface === domain;
-    const mode = inspecting && view.debug ? view.mode : inspecting && view.cutaway ? 'moisture' : 'surface';
-    const layer = inspecting && (view.debug || view.cutaway) ? Math.min(view.layer, wall.layers.length - 1) : 0;
+    const mode = inspecting && view.thermal ? 'thermal' : inspecting && view.debug ? view.mode : inspecting && view.cutaway ? 'moisture' : 'surface';
+    const layer = inspecting && (view.debug || view.cutaway) && !view.thermal ? Math.min(view.layer, wall.layers.length - 1) : 0;
     context.clearRect(0, 0, canvas.width, canvas.height);
     for (let y = 0; y < wall.rows; y++) for (let x = 0; x < wall.cols; x++) {
       const cell = wall.cells[cellIndex(wall, x, y, layer)];
       const cx = x * size, cy = (wall.rows - 1 - y) * size;
       const wet = clamp((cell.moisture - 8) / 50);
       if (mode === 'surface') {
+        if (cell.surfaceCoating > .015) {
+          context.fillStyle = `rgba(47,206,163,${Math.min(.48, cell.surfaceCoating * .5)})`;
+          context.fillRect(cx, cy, size, size);
+        }
         if (wet > .015) {
           const stain = context.createRadialGradient(cx + 6, cy + 6, 0, cx + 6, cy + 6, 15);
           stain.addColorStop(0, `rgba(25,74,89,${wet * .56})`);
@@ -55,9 +60,17 @@ export function createMoistureField(world: import('three').Group, domain: Domain
         if (cell.moldLevel > .03) { context.fillStyle = `rgba(31,62,42,${cell.moldLevel})`; context.fillRect(cx + 2, cy + 3, 4, 3); }
       } else {
         let color = `rgba(20,45,60,.6)`;
+        if (mode === 'thermal') {
+          const temperature = surfaceTemperatureC(state, { x: (x + .5) * wall.width / wall.cols - wall.width / 2, y: (y + .5) * wall.height / wall.rows }, domain) ?? state.environment.ambientTemperatureC;
+          color = thermalColor(temperature);
+        }
         if (mode === 'moisture' || mode === 'flow') color = `hsla(${215 - cell.moisture * 1.6},80%,${24 + cell.moisture * .35}%,.85)`;
         if (mode === 'cracks') color = cell.crackLevel > 0 || cell.material === 'waterproof' && cell.waterproofLevel < .5 ? '#f7c76ae8' : '#172a3899';
-        if (mode === 'pu') color = `rgba(71,245,202,${clamp(cell.pu + cell.expansion, .08, .95)})`;
+        if (mode === 'pu') {
+          if (cell.epoxyBond + cell.epoxy > cell.pu + cell.expansion && cell.epoxyBond + cell.epoxy > cell.gel + cell.gelSeal) color = `rgba(255,210,108,${clamp(cell.epoxyBond + cell.epoxy, .08, .95)})`;
+          else if (cell.gel + cell.gelSeal > cell.pu + cell.expansion) color = `rgba(187,155,255,${clamp(cell.gel + cell.gelSeal, .08, .95)})`;
+          else color = `rgba(71,245,202,${clamp(cell.pu + cell.expansion, .08, .95)})`;
+        }
         context.fillStyle = color; context.fillRect(cx, cy, size, size);
         if (mode === 'flow' && Math.hypot(cell.flowX, cell.flowY) > .15) {
           const magnitude = Math.hypot(cell.flowX, cell.flowY);
@@ -74,7 +87,8 @@ export function createMoistureField(world: import('three').Group, domain: Domain
         const { x, y } = gridPoint(wall, source.position);
         context.strokeStyle = '#ff778b'; context.lineWidth = 3;
         context.strokeRect(x * size - 4, (wall.rows - 1 - y) * size - 4, 20, 20);
-        context.fillStyle = '#fff'; context.font = '13px sans-serif'; context.fillText(source.kind === 'area' ? '地坪面狀供水' : source.kind === 'pipe' ? '破損暗管' : 'Leak source · 外側', x * size + 22, (wall.rows - 1 - y) * size + 10);
+        const label = source.kind === 'area' ? '地坪面狀供水' : source.kind === 'pipe' ? '破損給水管' : source.kind === 'drain' ? '破損排水管' : source.kind === 'groundwater' ? '負水壓入水點' : '外牆裂縫供水';
+        context.fillStyle = '#fff'; context.font = '13px sans-serif'; context.fillText(label, x * size + 22, (wall.rows - 1 - y) * size + 10);
       }
     }
     if (domain === 'floor' && view.debug && mode === 'source') {

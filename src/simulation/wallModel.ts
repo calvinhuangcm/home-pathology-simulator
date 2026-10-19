@@ -17,7 +17,7 @@ export function cellPoint(wall: WallModel, index: number): Point {
   return { x: ((index % wall.cols) + .5) * wall.width / wall.cols - wall.width / 2, y: (Math.floor(index / wall.cols) % wall.rows + .5) * wall.height / wall.rows };
 }
 export function createCell(material: Material): import('./types').WallCell {
-  return { material, moisture: 8, waterPressure: 0, saltLevel: 0, crackLevel: 0, waterproofLevel: material === 'waterproof' ? 1 : 0, moldLevel: 0, damageLevel: 0, pu: 0, expansion: 0, wetDuration: 0, flowX: 0, flowY: 0, flowZ: 0, surfaceCoating: 0, permeabilityScale: 1 };
+  return { material, moisture: 8, waterPressure: 0, saltLevel: 0, crackLevel: 0, waterproofLevel: material === 'waterproof' ? 1 : 0, moldLevel: 0, damageLevel: 0, pu: 0, epoxy: 0, gel: 0, epoxyBond: 0, gelSeal: 0, expansion: 0, wetDuration: 0, flowX: 0, flowY: 0, flowZ: 0, surfaceCoating: 0, permeabilityScale: 1 };
 }
 export function createWall(): WallModel {
   const layers: Material[] = ['paint', 'putty', 'mortar', 'rc', 'waterproof', 'tile'];

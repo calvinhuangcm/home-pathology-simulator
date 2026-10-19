@@ -2,9 +2,9 @@ import type { SimulationState, Domain } from '../simulation/types';
 
 /** The ceiling view is a different room: map slab-local y to depth, never to wall height. */
 export function createBathroomScene(architecture: import('three').Group) {
-  const slab = new THREE.Group(), pipes = new THREE.Group();
-  slab.name = 'bathroom-slab'; pipes.name = 'bathroom-pipes';
-  architecture.add(slab, pipes);
+  const slab = new THREE.Group(), pipes = new THREE.Group(), basement = new THREE.Group();
+  slab.name = 'bathroom-slab'; pipes.name = 'bathroom-pipes'; basement.name = 'basement-soil-and-pressure';
+  architecture.add(slab, pipes, basement);
   const colors = [0xd3d1c7, 0xb7b9b5, 0x879499, 0x5b6d76, 0x388d81, 0xb2a493];
   const thickness = [.04, .04, .1, .28, .04, .08];
   let base = 6;
@@ -14,12 +14,24 @@ export function createBathroomScene(architecture: import('three').Group) {
     mesh.name = layer === 0 ? 'bathroom-ceiling' : `bathroom-layer-${layer}`;
     slab.add(mesh);
   }
+  const soil = new THREE.Mesh(new THREE.BoxGeometry(10.6, 6.1, .52), new THREE.MeshStandardMaterial({ color: 0x59483b, roughness: 1, transparent: true, opacity: .55, depthWrite: false }));
+  soil.position.set(0, 3, -1.05); soil.name = 'basement-soil-mass'; basement.add(soil);
+  for (let n = 0; n < 8; n++) {
+    const y = .45 + n * .72;
+    const stratum = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(-5.1, y, -.77), new THREE.Vector3(5.1, y, -.77)]), new THREE.LineBasicMaterial({ color: n % 2 ? 0x8d7963 : 0x6d5a49, transparent: true, opacity: .55 }));
+    stratum.name = 'soil-stratum'; basement.add(stratum);
+  }
+  for (const x of [-3.4, -1.7, 1.7, 3.4]) {
+    const arrow = new THREE.ArrowHelper(new THREE.Vector3(0, 0, 1), new THREE.Vector3(x, .65, -1.55), .7, 0x59c6e6, .18, .12);
+    arrow.name = 'groundwater-pressure-arrow'; basement.add(arrow);
+  }
   let signature = '';
   return {
     update(s: SimulationState, active: boolean, surface: Domain, reveal: boolean) {
-      slab.visible = active && s.scenarioId === 'bathroom' && surface === 'slab';
-      pipes.visible = active && s.scenarioId === 'hotpipe';
-      const next = s.pipes.map(p => `${p.id}:${p.isolated}:${p.exposed}`).join('|');
+      slab.visible = active && (s.scenarioId === 'bathroom' || s.scenarioId === 'multi') && surface === 'slab';
+      pipes.visible = active && ['hotpipe', 'drain', 'multi'].includes(s.scenarioId);
+      basement.visible = active && s.scenarioId === 'basement' && reveal;
+      const next = s.pipes.map(p => `${p.id}:${p.isolated}:${p.exposed}:${p.service}`).join('|');
       const rebuilt = next !== signature;
       if (rebuilt) {
         for (const child of [...pipes.children]) { const mesh = child as import('three').Mesh; mesh.geometry.dispose(); (mesh.material as import('three').Material).dispose(); pipes.remove(child); }
@@ -28,7 +40,8 @@ export function createBathroomScene(architecture: import('three').Group) {
           // Polyline keeps right-angle rerouting explicit instead of inventing a new leak marker.
           const path = new THREE.CurvePath<import('three').Vector3>();
           for (let i = 1; i < points.length; i++) path.add(new THREE.LineCurve3(points[i - 1], points[i]));
-          const mesh = new THREE.Mesh(new THREE.TubeGeometry(path, 60, .055, 8, false), new THREE.MeshStandardMaterial({ color: pipe.isolated ? 0x657078 : pipe.exposed ? 0xe8b783 : 0xc85b59, roughness: .45, transparent: true, depthTest: pipe.exposed }));
+          const color = pipe.isolated ? 0x657078 : pipe.exposed ? pipe.service === 'drain' ? 0x55bdd5 : 0xe8b783 : pipe.service === 'drain' ? 0x55bdd5 : 0xc85b59;
+          const mesh = new THREE.Mesh(new THREE.TubeGeometry(path, 60, .055, 8, false), new THREE.MeshStandardMaterial({ color, roughness: .45, transparent: true, depthTest: pipe.exposed }));
           mesh.userData.exposed = pipe.exposed; mesh.renderOrder = 7;
           pipes.add(mesh);
         }

@@ -42,10 +42,13 @@ async function countExposedBrick() {
 }
 try {
   await page.goto(baseUrl); await page.waitForFunction(() => !!window.__simTest);
-  const expected = ['window', 'crack', 'bathroom', 'hotpipe', 'pipe', 'condensation', 'rooftop'];
+  const expected = ['window', 'crack', 'bathroom', 'hotpipe', 'drain', 'multi', 'basement', 'pipe', 'condensation', 'rooftop'];
   assert.deepEqual(await page.locator('.scenario-card').evaluateAll(cards => cards.map(c => c.dataset.scenario)), expected);
   assert.equal(await page.locator('[data-scenario=bathroom] .icon').innerText(), '🚿');
   assert.equal(await page.locator('[data-scenario=hotpipe] .icon').innerText(), '🚰');
+  assert.equal(await page.locator('[data-scenario=drain] .icon').innerText(), '🚽');
+  assert.equal(await page.locator('[data-scenario=multi] .icon').innerText(), '🧩');
+  assert.equal(await page.locator('[data-scenario=basement] .icon').innerText(), '🏚️');
   for (const scenario of expected) {
     await page.locator(`[data-scenario=${scenario}]`).click();
     assert.ok(!(await page.locator('body').innerText()).includes('舊版示意'));

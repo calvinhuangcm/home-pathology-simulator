@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="建築漏水診斷與修繕模擬器：逐格水分擴散與 PU 止水">
   <link rel="icon" href="data:,">
-  <title>漏水打針模擬器 · 互動實驗室</title>
+  <title>壁癌模擬器 · 互動實驗室</title>
   <link rel="stylesheet" href="/src/ui/styles.css">
 </head>
 <body>
@@ -14,13 +14,13 @@
       <div class="brand">
         <div class="brand-mark">💧</div>
         <div>
-          <h1>漏水打針模擬器</h1>
+          <h1>壁癌模擬器</h1>
           <p>互動實驗室 · 找到水路，追蹤修復效果</p>
         </div>
       </div>
       <div class="top-status">
         <span class="pill" id="assetStatus" aria-live="polite"><i class="dot"></i>本機程序素材就緒</span>
-        <span class="pill"><i class="dot"></i>Scenario 01 / 02 · Cellular Engine</span>
+        <span class="pill"><i class="dot"></i>分層含水模擬</span>
         <span class="pill warn"><i class="dot"></i>教育模擬，不是施工規範</span>
       </div>
     </header>
@@ -29,33 +29,43 @@
       <aside class="panel controls">
         <div class="scroll">
           <section class="section workflow">
-            <div class="section-title"><h2>操作流程</h2><span>1 — 5 快捷鍵</span></div>
+            <div class="section-title"><h2>操作流程</h2><span>1 — 6 快捷鍵</span></div>
             <div class="segmented" id="modeButtons" aria-label="選擇操作工具">
               <button type="button" class="active" data-mode="inspect" aria-pressed="true">檢測</button>
               <button type="button" data-mode="drill" aria-pressed="false">鑽孔</button>
               <button type="button" data-mode="insert" aria-pressed="false">塞針</button>
               <button type="button" data-mode="inject" aria-pressed="false">注入</button>
               <button type="button" data-mode="verify" aria-pressed="false">驗證</button>
+              <button type="button" data-mode="paint" aria-pressed="false" title="在牆面或地板拖曳自由塗刷防水">塗刷</button>
             </div>
             <p id="workflowSummary" class="workflow-summary">先量測基準濕度點，再量測可疑濕區</p>
             <p class="hint" id="modeHint">移動游標預覽濕度，點擊固定讀值。</p>
             <button class="btn" id="undoBtn" type="button" disabled>↶ 撤銷上一步</button>
           </section>
           <section class="section">
-            <div class="section-title"><h2>情境選擇</h2><span>Scenario</span></div>
-            <p class="hint scenario-hint">Scenario 01、02A、02B 已接上分層引擎。其他情境保留初版示意，TODO：移植物理模型。切換會重置進度。</p>
+            <div class="section-title"><h2>情境選擇</h2><span>情境案例</span></div>
+            <p class="hint scenario-hint">外牆裂縫、浴室防水、暗管、排水、多重漏水與地下室等情境使用分層含水引擎；其他情境仍為原型診斷展示。切換會重置進度。</p>
             <div class="scenario-grid">
               <button type="button" class="scenario-card" data-scenario="window" aria-pressed="false">
                 <span class="card-head"><span class="icon">🪟</span><span><strong>窗框／窗台滲水</strong><small>雨水從開口與排水層進入牆體</small></span></span>
               </button>
               <button type="button" class="scenario-card active" data-scenario="crack" aria-pressed="true">
-                <span class="card-head"><span class="icon">🧱</span><span><strong>01 · 外牆裂縫滲水</strong><small>逐格擴散 → PU 止水 → 乾燥</small></span></span>
+                <span class="card-head"><span class="icon">🧱</span><span><strong>外牆裂縫滲水</strong><small>逐格擴散 → PU 止水 → 乾燥</small></span></span>
               </button>
               <button type="button" class="scenario-card" data-scenario="bathroom" aria-pressed="false">
-                <span class="card-head"><span class="icon" aria-hidden="true">🚿</span><span><strong>02A 浴室防水失效</strong><small>樓下天花／外側牆腳</small></span></span>
+                <span class="card-head"><span class="icon" aria-hidden="true">🚿</span><span><strong>浴室防水失效</strong><small>樓下天花／外側牆腳</small></span></span>
               </button>
               <button type="button" class="scenario-card" data-scenario="hotpipe" aria-pressed="false">
-                <span class="card-head"><span class="icon" aria-hidden="true">🚰</span><span><strong>02B 熱水暗管破損</strong><small>隔離舊管 → 改明管</small></span></span>
+                <span class="card-head"><span class="icon" aria-hidden="true">🚰</span><span><strong>熱水暗管破損</strong><small>隔離舊管 → 改明管</small></span></span>
+              </button>
+              <button type="button" class="scenario-card" data-scenario="drain" aria-pressed="false">
+                <span class="card-head"><span class="icon" aria-hidden="true">🚽</span><span><strong>排水管破損</strong><small>排水時漏水 → 局部修管</small></span></span>
+              </button>
+              <button type="button" class="scenario-card" data-scenario="multi" aria-pressed="false">
+                <span class="card-head"><span class="icon" aria-hidden="true">🧩</span><span><strong>多重漏水</strong><small>防水層 + 排水管兩個來源</small></span></span>
+              </button>
+              <button type="button" class="scenario-card" data-scenario="basement" aria-pressed="false">
+                <span class="card-head"><span class="icon" aria-hidden="true">🏚️</span><span><strong>地下室負水壓</strong><small>地下水壓 → 迎水側缺損</small></span></span>
               </button>
               <button type="button" class="scenario-card" data-scenario="pipe" aria-pressed="false">
                 <span class="card-head"><span class="icon">🛠️</span><span><strong>管線漏水陷阱</strong><small>高讀值不代表適合打針</small></span></span>
@@ -140,7 +150,7 @@
           </section>
 
           <section class="section">
-            <p class="footnote">⚠ 本工具將現場材料、壓力與水路簡化成可解釋的教學模型。實際鑽孔、注入、化學品與結構判斷，需依現場條件、產品資料與合格專業人員評估。</p>
+            <p class="footnote">⚠ 本工具將現場材料、壓力與水路簡化成可解釋的教學模型。實際鑽孔、注入、化學品與結構判斷，需依現場條件、產品資料與合格專業人員評估。<br><a href="https://github.com/calvinhuangcm" target="_blank" rel="noopener noreferrer">github.com/calvinhuangcm</a></p>
           </section>
         </div>
       </aside>

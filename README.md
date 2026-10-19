@@ -1,8 +1,12 @@
-# 漏水打針模擬器
+# 壁癌模擬器
 
 保留原有三欄 UI、Three.js 場景、工具幾何、孔位清單與滑鼠／觸控流程，Scenario 01「外牆裂縫滲水」、02A「浴室防水層失效」、02B「熱水暗管破損」共用獨立的 TypeScript 分層網格引擎。
 
 ## 啟動
+
+在 Finder 雙擊專案根目錄的 `啟動壁癌模擬器.command`，即可啟動本機伺服器並自動開啟瀏覽器。終端機會保持開啟以顯示訊息；按 Ctrl+C 停止伺服器。若模擬器已在執行，啟動檔會直接開啟現有頁面。
+
+也可以手動執行：
 
 ```sh
 ./scripts/run.sh dev
@@ -12,7 +16,7 @@
 
 一般 Node 環境也可以執行 `npm install`、`npm run dev`。專案使用 Vite 7，Node 版本需符合 [Vite 的需求](https://vite.dev/guide/)。目前 pnpm lockfile 固定已驗證的依賴版本。
 
-`漏水打針模擬器.html` 現在是模組版入口導向頁。模組版需要本機 HTTP server；若要直接開啟原本單檔版本，使用 [原版備份](docs/original-prototype.html)。原始檔完整保存在該備份中。
+`壁癌模擬器.html` 現在是模組版入口導向頁。模組版需要本機 HTTP server；若要直接開啟原本單檔版本，使用 [原版備份](docs/original-prototype.html)。原始檔完整保存在該備份中。
 
 ## 操作 Scenario 01
 

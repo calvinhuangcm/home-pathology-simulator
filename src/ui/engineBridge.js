@@ -25,7 +25,7 @@ export function connectEngine(state, engine) {
     },
     connectPort(view, id) {
       const port = () => engine.state.repairs.ports.find(p => p.id === id);
-      const getters = { hitPath: () => port()?.connected ?? false, drilled: () => port()?.drillProgress === 1, inserted: () => port()?.inserted ?? false, volume: () => (port()?.volumeMl ?? 0) / 180, material: () => (port()?.volumeMl ?? 0) > 0 || engine.state.repairs.activePortId === id ? 'pu' : null };
+      const getters = { hitPath: () => port()?.connected ?? false, drilled: () => port()?.drillProgress === 1, inserted: () => port()?.inserted ?? false, volume: () => (port()?.volumeMl ?? 0) / 180, material: () => port()?.material ?? null };
       for (const [name, get] of Object.entries(getters)) Object.defineProperty(view, name, { get, set: () => {} });
     },
   };
