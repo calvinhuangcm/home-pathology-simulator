@@ -7,7 +7,7 @@
 
 以因果模擬學習建築滲漏診斷：追蹤水源、材料內的水分移動與表面損傷，再透過量測及源頭修復驗證判斷。
 
-**線上版：**GitHub Pages 已設定為 GitHub Actions 部署；此次推送會觸發首次部署。網站網址為 [calvinhuangcm.github.io/home-pathology-simulator](https://calvinhuangcm.github.io/home-pathology-simulator/)，待部署工作流程成功後即可使用。
+**線上版：**[直接開啟 GitHub Pages 模擬器](https://calvinhuangcm.github.io/home-pathology-simulator/)。
 
 ### 功能一覽
 
@@ -112,7 +112,7 @@ AGENTS.md 含有依課程教材整理的開發指引，明確排除於本專案�
 
 Learn building leak diagnosis through cause-and-effect simulation. Track water sources, transport through materials, and surface damage, then use measurements and source repairs to examine your diagnosis.
 
-**Online version:** GitHub Pages is configured to deploy with GitHub Actions. This push will trigger the first deployment. The site URL is [calvinhuangcm.github.io/home-pathology-simulator](https://calvinhuangcm.github.io/home-pathology-simulator/); it will be available after the deployment workflow succeeds.
+**Online version:** [Open the simulator on GitHub Pages](https://calvinhuangcm.github.io/home-pathology-simulator/).
 
 ### Features
 
@@ -217,7 +217,7 @@ AGENTS.md contains development guidance adapted from course materials and is exp
 
 建物の漏水診断を、原因と結果のシミュレーションで学べます。水源、材料内の水分移動、表面損傷を追跡し、測定と水源側の補修によって診断を確認します。
 
-**オンライン版：**GitHub Pages は GitHub Actions でデプロイする設定です。今回の push で初回デプロイが開始されます。サイト URL は [calvinhuangcm.github.io/home-pathology-simulator](https://calvinhuangcm.github.io/home-pathology-simulator/) です。デプロイワークフローが成功すると利用できます。
+**オンライン版：**[GitHub Pages でシミュレーターを開く](https://calvinhuangcm.github.io/home-pathology-simulator/)。
 
 ### 主な機能
 
