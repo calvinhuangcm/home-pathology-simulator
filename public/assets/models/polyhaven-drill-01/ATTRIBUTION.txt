@@ -1,0 +1,4 @@
+Drill 01 model by Fernando Quinn, from Poly Haven
+https://polyhaven.com/a/Drill_01
+CC0 1.0 Universal: https://polyhaven.com/license
+This project uses the 1K glTF variant and its included 1K textures.

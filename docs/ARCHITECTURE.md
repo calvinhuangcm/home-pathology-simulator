@@ -67,7 +67,7 @@ Renderer 沿用 Three.js，Canvas moistureField 可投影到牆面或天花。�
 
 香港屋宇署將供排水管滲漏、防水層失效列為不同常見來源；聯合辦事處也區分供水管測試、地坪蓄水與牆面噴水等調查方式。這支持本次把兩案的供水條件和修復方式分開，並不表示單看濕斑就能確診。[屋宇署滲水 FAQ](https://www.bd.gov.hk/en/resources/faq/index_water_seepage_problem.html)、[滲水調查技術](https://www.waterseepage.gov.hk/en/water_seepage/technologies.html)。
 
-使用者指定的改明管以「隔離破損暗管 + 健康外露替代路徑」建模；並未模擬現場管徑、接頭、保溫、熱膨脹或水溫，也未聲稱任何浴室都適合相同改管方案。此版只有水分／供水壓力因果模型，沒有熱像或熱傳假功能。
+使用者指定的改明管以「隔離破損暗管 + 健康外露替代路徑」建模；並未模擬現場管徑、接頭、保溫、熱膨脹或真實熱傳，也未聲稱任何浴室都適合相同改管方案。熱像功能使用情境狀態與可調環境條件產生教學估算，並非校正儀器的量測資料。
 
 ## 目錄與責任
 
@@ -77,12 +77,15 @@ Renderer 沿用 Three.js，Canvas moistureField 可投影到牆面或天花。�
 | `src/main.ts` | 小型啟動入口 |
 | `src/simulation/types.ts`, `wallModel.ts` | cell / source / repair 型別、座標索引與網格邊 |
 | `src/simulation/SimulationEngine.ts` | 固定 tick、快照／還原、彙總讀值 |
+| `src/simulation/diagnostics.ts` | 證據事件、診斷假設／評分、有限單支排水測試、地下水位轉教學水壓 |
 | `waterSimulation.ts`, `damageSimulation.ts`, `repairSimulation.ts` | 獨立的水分、損傷、PU 更新 |
 | `src/scenarios/exteriorCrack.ts` | Scenario 01 幾何、材料、來源及裂縫連通資料 |
 | `src/scenarios/bathroom.ts`, `src/simulation/bathroomRepairs.ts` | 02A／02B 初始資料、驗證供水與修繕動作、作業狀態更新 |
 | `src/renderer/bathroomScene.ts`, `src/ui/bathroomControls.ts` | 樓板／明暗管幾何、供水控制、觀察面及修繕 UI |
 | `src/scenarios/legacyCatalog.js` | 舊 UI 情境 metadata，包含明示的舊示意情境 |
 | `src/tools/` | 確定性 cell 量測與驗證後的鑽孔／塞針／注入動作 |
+| `src/tools/thermalCamera.ts` | 依 moisture、壓力、供水管溫與掃描條件計算表面溫度估算及混淆警示 |
+| `src/ui/diagnosticControls.ts`, `diagnosisControls.ts` | 支管／地下水情境控制、證據時間軸、多來源假設與 Diagnosis Score |
 | `src/renderer/moistureField.ts` | state → Canvas texture 與六層切片；不影響 physics |
 | `src/renderer/sceneGeometry.js`, `externalAssets.js` | 保留的 Three.js 幾何、程序貼圖與選用外部資產 |
 | `src/ui/engineBridge.js`, `simulationControls.ts` | 舊 UI view model 及新儀器／DEBUG 控制 |
@@ -92,8 +95,9 @@ Renderer 沿用 Three.js，Canvas moistureField 可投影到牆面或天花。�
 
 ## KNOWN ISSUES / TODO
 
-- 窗框、舊管線示意、結露、樓頂仍是 legacy。02B 與舊管線示意是不同卡片；新引擎沒有把舊情境的動畫假裝成物理。自由塗刷防水工具、多重漏水、排水管尚未實作。
-- Epoxy 與凝膠在 Scenario 01 禁用並標示 TODO；裂縫活動性與 Diagnosis Score 尚未實作；表面整修目前限 02A／02B。原有「規則符合度」只在舊版示意保留，新引擎案例隱藏此欄，不以規則值假裝 Diagnosis Score。
+- 窗框、舊管線示意、結露、樓頂仍是 legacy。02B 與舊管線示意是不同卡片；新引擎沒有把舊情境的動畫假裝成物理。排水、多重漏水與地下室已有獨立網格來源與情境邏輯。
+- 證據時間軸與 Diagnosis Score 已接入新引擎，分開計算來源精確率、涵蓋率與信心校準；評分依情境來源，是教學回饋。熱像已提供溫度估算、露點、環境混淆警示及判讀信心，但沒有相機校正與量測雜訊。敲診與裂縫計尚未接入新引擎。
+- Epoxy、凝膠與自由塗刷防水工具已有各自受限的模擬用途；不得把表面塗層當成管線／內部水源修復。表面整修目前限新案例既有支援範圍。
 - 舊版 controller 仍約 2200 行，部分 UI 與舊情境邏輯尚未完全型別化。這是刻意保留的遷移邊界，避免一次破壞其他流程。
 - 六層使用簡化網格，不反映實際層厚、孔隙率、溫度與材料本構。表面可視裂縫沿用既有幾何；內部裂縫依新模型，兩者不要求逐點重合。
 - 3D 場景需要 WebGL。遠端模型／貼圖由使用者選擇載入，可能受網路或供應商限制；預設本機程序資產不依賴網路。這次沒有驗證所有遠端資產仍可下載。
@@ -101,7 +105,7 @@ Renderer 沿用 Three.js，Canvas moistureField 可投影到牆面或天花。�
 
 ## NEXT STEP
 
-優先新增可比較的調查記錄：地坪用水開關／壓力隔離試驗的時間序列、同點複測，以及同時存在膜失效與管線破損的混合案例。之後再加入排水管與溫度模型，讓熱像讀值也來自狀態。
+下一階段可遷移窗框、樓頂與結露的舊情境至網格引擎，再實作敲診／裂縫計與「非校正熱像」的明確雜訊及信心模型。診斷流程亦可增加同點複測、供水事件前後的時間序列圖，並繼續驗證多來源案例及錯誤修復的結果。
 
 
 ## 室內地板模型（2026-10-16）

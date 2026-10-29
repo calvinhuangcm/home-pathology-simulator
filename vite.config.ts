@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vite';
 
 // GitHub Pages serves this project below /<repository>/; keep local URLs at /.
@@ -5,4 +6,13 @@ const base = process.env.GITHUB_ACTIONS === 'true'
   ? '/home-pathology-simulator/'
   : '/';
 
-export default defineConfig({ base });
+export default defineConfig({
+  base,
+  build: {
+    rollupOptions: {
+      input: {
+        main: fileURLToPath(new URL('./index.html', import.meta.url)),
+      },
+    },
+  },
+});

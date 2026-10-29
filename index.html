@@ -22,6 +22,7 @@
         <span class="pill" id="assetStatus" aria-live="polite"><i class="dot"></i>本機程序素材就緒</span>
         <span class="pill"><i class="dot"></i>分層含水模擬</span>
         <span class="pill warn"><i class="dot"></i>教育模擬，不是施工規範</span>
+        <label class="language-picker" for="languageSelect"><span>語言</span><select id="languageSelect" aria-label="選擇語言"><option value="zh-Hant">繁體中文</option><option value="en">English</option><option value="ja">日本語</option></select></label>
       </div>
     </header>
 
@@ -37,6 +38,22 @@
               <button type="button" data-mode="inject" aria-pressed="false">注入</button>
               <button type="button" data-mode="verify" aria-pressed="false">驗證</button>
               <button type="button" data-mode="paint" aria-pressed="false" title="在牆面或地板拖曳自由塗刷防水">塗刷</button>
+            </div>
+            <div id="drillAimControl" class="drill-aim-control" hidden>
+              <div class="drill-aim-heading"><strong>鑽孔方向</strong><span>45° 示範傾角</span></div>
+              <div class="drill-direction-pad" role="group" aria-label="選擇鑽孔斜向">
+                <button type="button" data-drill-direction="up" aria-pressed="false">↑ 上</button>
+                <button type="button" data-drill-direction="left" aria-pressed="false">← 左</button>
+                <button type="button" data-drill-direction="down" aria-pressed="true">↓ 下</button>
+                <button type="button" data-drill-direction="right" aria-pressed="false">→ 右</button>
+              </div>
+              <label class="drill-model-choice" for="drillModelSelect">鑽孔機外觀
+                <select id="drillModelSelect" aria-label="選擇鑽孔機外觀">
+                  <option value="procedural">內建程序模型</option>
+                  <option value="external" disabled>Poly Haven Drill 01（載入素材後可用）</option>
+                </select>
+              </label>
+              <small>載入成功後以 Poly Haven Drill 01 進行灌注前鑽孔；塞針與注料仍使用止水針及灌注機。傾角與牆厚為教學示意值。</small>
             </div>
             <p id="workflowSummary" class="workflow-summary">先量測基準濕度點，再量測可疑濕區</p>
             <p class="hint" id="modeHint">移動游標預覽濕度，點擊固定讀值。</p>
@@ -139,7 +156,8 @@
               <button class="btn flex" id="soundBtn">🔇 開啟滴水音</button>
               <button class="btn flex" id="labelsBtn" aria-pressed="true">🏷 隱藏標籤</button>
             </div>
-          <button class="btn" id="loadAssetsBtn" type="button">載入原版外部素材（選用）</button></section>
+          <button class="btn" id="loadAssetsBtn" type="button">載入其他外觀素材（選用）</button>
+          <p class="asset-note"><a href="https://polyhaven.com/a/Drill_01" target="_blank" rel="noopener noreferrer">Poly Haven · Drill 01</a>（Fernando Quinn，CC0）會自動載入並用於鑽孔游標；切到「鑽孔」後將游標移到牆面即可看見。灌注機為內建自製 3D 教學模型，依便攜式單液注漿泵的料斗、驅動馬達、壓力表與高壓管配置建模，非特定品牌產品；造型配置參考<a href="https://multiurethanes.com/products/impact-x-410-pump/" target="_blank" rel="noopener noreferrer">專用化學注漿泵資料</a>。</p></section>
 
           <section class="section" id="scenarioActionSection">
             <div class="section-title"><h2>源頭修繕</h2><span>Source first</span></div>

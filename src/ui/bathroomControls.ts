@@ -77,7 +77,7 @@ export function createBathroomControls(engine: SimulationEngine, view: FieldView
       get<HTMLInputElement>('bathroomUse').disabled = verifying || job?.kind === 'waterproof';
       get<HTMLInputElement>('pipeValve').disabled = verifying || job?.kind === 'bypass';
       get<HTMLInputElement>('pipePressure').disabled = verifying || job?.kind === 'bypass';
-      get('bathroomRepairStatus').textContent = job ? `${{ surface: '表面整修', waterproof: '防水重作', bypass: '舊管隔離與明管安裝', drain: '排水管修復' }[job.kind]} · ${job.elapsed.toFixed(1)} / ${job.duration}s${s.running && s.timeScale > 0 ? '' : ' · 已暫停'}` : `表面整修 ${s.repairs.surfacePatchCount} 次 · ${floor ? s.repairs.waterproofRepaired ? '防水層已重作' : '防水層尚未重作' : s.repairs.bypassInstalled ? '舊管已隔離／明管已接通' : '暗管尚未更換'}`;
+      get('bathroomRepairStatus').textContent = job ? `${{ surface: '表面整修', waterproof: '防水重作', 'negative-seal': '室內側封堵', bypass: '舊管隔離與明管安裝', drain: '排水管修復' }[job.kind]} · ${job.elapsed.toFixed(1)} / ${job.duration}s${s.running && s.timeScale > 0 ? '' : ' · 已暫停'}` : `表面整修 ${s.repairs.surfacePatchCount} 次 · ${floor ? s.repairs.waterproofRepaired ? '防水層已重作' : '防水層尚未重作' : s.repairs.bypassInstalled ? '舊管已隔離／明管已接通' : '暗管尚未更換'}`;
       get<HTMLProgressElement>('bathroomRepairProgress').hidden = !job;
       get<HTMLProgressElement>('bathroomRepairProgress').value = job ? job.elapsed / job.duration : 0;
     },

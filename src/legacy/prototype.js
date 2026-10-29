@@ -15,8 +15,10 @@ import { createMoistureField } from '../renderer/moistureField';
 import { createSimulationControls } from '../ui/simulationControls';
 import { connectEngine } from '../ui/engineBridge';
 import { createDiagnosticControls } from '../ui/diagnosticControls';
+import { createDiagnosisControls } from '../ui/diagnosisControls';
+import { appendDiagnosticEvidence } from '../simulation/diagnostics';
 import { brushWaterproof } from '../tools/surfaceWaterproof';
-import { surfaceTemperatureC } from '../tools/thermalCamera';
+import { surfaceTemperatureC, thermalAssessment } from '../tools/thermalCamera';
 
 // Preserved prototype controller. Only legacy scenarios use the scalar demo model below.
 // Scenario 01 delegates every physical reading/action to the typed SimulationEngine.
@@ -47,6 +49,8 @@ import { surfaceTemperatureC } from '../tools/thermalCamera';
       sceneSubtitle: $('#sceneSubtitle'),
       modeBadge: $('#modeBadge'),
       modeHint: $('#modeHint'),
+      drillAimControl: $('#drillAimControl'),
+      drillModelSelect: $('#drillModelSelect'),
       rainSlider: $('#rainSlider'),
       rainValue: $('#rainValue'),
       rainColorPicker: $('#rainColorPicker'),
@@ -91,18 +95,15 @@ import { surfaceTemperatureC } from '../tools/thermalCamera';
     // =========================
     const defaultRainColor = '#51d6f4';
 
-    // 外部素材採「可選增強」策略：室內粉光、牆體磚層貼圖與 CC0 glTF 工具模型從網路載入，
-    // 離線時改用 Canvas 程式材質和程序幾何，保留單檔 HTML 的基本操作能力。
-    // 貼圖採 Poly Haven 的 White Plaster 02／Red Brick 03（CC0）；電鑽與泵體採 3DAssets.dev（CC0）。
-    // 泵體是通用轉送泵的視覺素材，不代表實際高壓灌注機規格；壓力表與灌注流程仍由本模擬器呈現。
+    // 外部材質採「可選增強」策略；電鑽模型檔由專案本機提供，避免再從模型 CDN 下載。
+    // Poly Haven Drill 01 為 CC0；灌注機維持專用程序模型，避免以用途不符的一般輸送泵冒充。
     const externalAssetUrls = {
       plasterDiffuse: 'https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/white_plaster_02/white_plaster_02_diff_1k.jpg',
       plasterBump: 'https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/white_plaster_02/white_plaster_02_bump_1k.jpg',
       brickDiffuse: 'https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/red_brick_03/red_brick_03_diff_1k.jpg',
       brickBump: 'https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/red_brick_03/red_brick_03_bump_1k.jpg',
       materialBottle: 'https://cdn.jsdelivr.net/gh/KhronosGroup/glTF-Sample-Assets@main/Models/WaterBottle/glTF-Binary/WaterBottle.glb',
-      drillTool: 'https://cdn.3dassets.dev/assets/23934/v1/model.glb',
-      injectionPump: 'https://cdn.3dassets.dev/assets/30870/v1/model.glb',
+      drillTool: './assets/models/polyhaven-drill-01/Drill_01.gltf',
     };
     const externalAssets = {
       plasterDiffuse: null,
@@ -111,9 +112,11 @@ import { surfaceTemperatureC } from '../tools/thermalCamera';
       brickBump: null,
       materialBottle: null,
       drillTool: null,
-      injectionPump: null,
-      loaded: { plasterDiffuse: false, plasterBump: false, brickDiffuse: false, brickBump: false, materialBottle: false, drillTool: false, injectionPump: false },
-      failed: { plasterDiffuse: false, plasterBump: false, brickDiffuse: false, brickBump: false, materialBottle: false, drillTool: false, injectionPump: false },
+      loaded: { plasterDiffuse: false, plasterBump: false, brickDiffuse: false, brickBump: false, materialBottle: false, drillTool: false },
+      failed: { plasterDiffuse: false, plasterBump: false, brickDiffuse: false, brickBump: false, materialBottle: false, drillTool: false },
+      loading: { plasterDiffuse: false, plasterBump: false, brickDiffuse: false, brickBump: false, materialBottle: false, drillTool: false },
+      fullLoadRequested: false,
+      gltfLoaderPromise: null,
       statusLogged: false,
       timeout: null,
     };
@@ -121,6 +124,9 @@ import { surfaceTemperatureC } from '../tools/thermalCamera';
     const state = {
       scenario: 'crack',
       mode: 'inspect',
+      drillDirection: 'down',
+      drillModel: 'procedural',
+      drillModelExplicit: false,
       material: 'pu',
       meter: 'pinless',
       crackState: 'static',
@@ -174,6 +180,7 @@ import { surfaceTemperatureC } from '../tools/thermalCamera';
       changeView: () => { cancelGestures(); setView('home'); updateMeasurementMarkers(); refreshUI(); },
       remember: snapshot => remember('診斷情境修繕', () => {}, snapshot),
     });
+    const diagnosisControls = createDiagnosisControls(engine);
     const floorControls = createFloorControls(engine, simulationControls.view, {
       changeView: () => { if (engine.state.tools.floorTestArmed && state.mode !== 'inspect') setMode('inspect'); cancelGestures(); setView('home'); updateMeasurementMarkers(); refreshUI(); },
       notify: (message, type) => showToast(message, type),
@@ -250,11 +257,10 @@ import { surfaceTemperatureC } from '../tools/thermalCamera';
       unitBox: new THREE.BoxGeometry(1, 1, 1),
       unitPlane: new THREE.PlaneGeometry(1, 1),
       smallSphere: new THREE.SphereGeometry(.07, 8, 6),
-      portCylinder: new THREE.CylinderGeometry(.085, .085, .22, 12),
       targetRing: new THREE.RingGeometry(.12, .155, 28),
     };
 
-    const { createFallbackSurfaceMaps, addBox, addLine, makeTextSprite, buildFloorAndRoom, buildWall, buildWindow, buildRainField, buildPipe, buildRooftopBalcony, buildLabels, buildToolCursor, buildInjectionMachine } = createSceneGeometry({ state, reusable, colors, mat, basic, randomSeeded, materialProfiles, architecture, toolCursorGroup, injectionMachineGroup, rainGroup, labelGroup });
+    const { createFallbackSurfaceMaps, addBox, addLine, makeTextSprite, refreshTextSprites, buildFloorAndRoom, buildWall, buildWindow, buildRainField, buildPipe, buildRooftopBalcony, buildLabels, buildToolCursor, buildInjectionMachine } = createSceneGeometry({ state, reusable, colors, mat, basic, randomSeeded, materialProfiles, architecture, toolCursorGroup, injectionMachineGroup, rainGroup, labelGroup });
 
     const hoverRing = new THREE.Mesh(reusable.targetRing, basic(0x55d6e6, { side: THREE.DoubleSide, depthTest: false, depthWrite: false, transparent: true, opacity: .95 }));
     hoverRing.renderOrder = 20;
@@ -285,7 +291,7 @@ import { surfaceTemperatureC } from '../tools/thermalCamera';
       while (group.children.length) disposeObject(group.children[group.children.length - 1]);
     }
 
-    const { loadExternalAssets } = createExternalAssets({ state, ui, externalAssets, externalAssetUrls, renderer, architecture, injectionMachineGroup, toolCursorGroup, makeTextSprite, addLog });
+    const { loadDrillAsset, loadExternalAssets } = createExternalAssets({ state, ui, externalAssets, externalAssetUrls, renderer, architecture, injectionMachineGroup, toolCursorGroup, makeTextSprite, addLog });
 
     function createScene() {
       buildFloorAndRoom();
@@ -727,6 +733,13 @@ import { surfaceTemperatureC } from '../tools/thermalCamera';
       const badge = modeLabels[state.mode][0];
       ui.modeBadge.textContent = badge;
       ui.modeHint.textContent = state.scenario === 'crack' && state.mode === 'verify' ? '在相同雨勢與側風下觀察 120 秒模擬時間，比較修繕前後趨勢。' : modeLabels[state.mode][1];
+      if (state.mode === 'drill') ui.modeHint.textContent = '移動游標到牆面，Poly Haven Drill 01 會跟隨顯示；選擇斜向後點擊鑽孔。模型載入中時先用內建模型。';
+      ui.drillAimControl.hidden = state.mode !== 'drill';
+      $$('[data-drill-direction]').forEach((button) => {
+        const selected = button.dataset.drillDirection === state.drillDirection;
+        button.classList.toggle('active', selected);
+        button.setAttribute('aria-pressed', String(selected));
+      });
       if (state.scenario !== 'crack' && isCellularScenario(state.scenario)) ui.modeHint.textContent = state.mode === 'verify' ? '恢復修繕前相同供水條件，觀察 120 秒。' : '量測濕區與乾區；依來源調整供水與修繕，再驗證乾燥趨勢。';
       document.getElementById('scenarioActionSection').hidden = isCellularScenario(state.scenario);
       updateScenarioFeatureVisibility();
@@ -900,17 +913,17 @@ import { surfaceTemperatureC } from '../tools/thermalCamera';
           const radius = (.18 + v * .58 * profile.spread) * (.65 + randomSeeded(seed) * .6);
           stain.scale.set(radius * 1.4, radius, 1);
           if (i === 0) {
-            stain.position.copy(port.point).addScaledVector(port.normal, .035);
-            stain.quaternion.setFromUnitVectors(outward, port.normal);
+            stain.position.copy(port.point).addScaledVector(port.drillOutward || port.normal, .035);
+            stain.quaternion.setFromUnitVectors(outward, port.drillOutward || port.normal);
             stain.scale.multiplyScalar(1.5);
           } else if (!port.hitPath || port.surface === 'ceiling') {
             // 未命中時只在孔附近積聚，不能把材料瞬間傳送到遠處的主要水路。
             const angle = i * 2.4;
             const reach = Math.sqrt(i / 10) * v * (port.hitPath ? 1.2 : .35);
             const offset = new THREE.Vector3(Math.cos(angle) * reach, Math.sin(angle) * reach, -.06);
-            offset.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(outward, port.normal));
+            offset.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(outward, port.drillOutward || port.normal));
             stain.position.copy(port.point).add(offset);
-            stain.quaternion.setFromUnitVectors(outward, port.normal);
+            stain.quaternion.setFromUnitVectors(outward, port.drillOutward || port.normal);
           } else {
             const offset = (i % 2 ? 1 : -1) * Math.ceil(i / 2) / 5 * v * .26 * profile.spread;
             stain.position.copy(pointOnPath(path, clamp(anchor + offset)));
@@ -932,39 +945,97 @@ import { surfaceTemperatureC } from '../tools/thermalCamera';
       const profile = materialProfiles[port?.material || state.material];
       const pumping = state.injection.active && state.running && state.timeScale > 0;
       machine.userData.tankFill.material.color.setHex(profile.color);
-      machine.userData.tankFill.scale.y = Math.max(.18, 1 - state.injection.total * .15);
+      const fillRatio = Math.max(.14, 1 - state.injection.total * .15);
+      machine.userData.tankFill.scale.y = machine.userData.tankFillMaxHeight * fillRatio;
+      machine.userData.tankFill.position.y = machine.userData.tankFillBaseY + machine.userData.tankFill.scale.y / 2;
       machine.userData.statusLight.material.color.setHex(pumping ? profile.color : 0x5fe0a1);
-      machine.userData.pumpHead.position.y = .82 + (pumping ? Math.sin(state.time * 9) * .035 : 0);
+      machine.userData.pumpHead.position.y = .82 + (pumping ? Math.sin(state.time * 9) * .006 : 0);
       machine.userData.gaugeNeedle.rotation.z = -.45 - (state.scenario === 'crack' ? engine.state.repairs.pressure / 2 : pumping ? .5 + (port?.volume || 0) : 0);
-      // 軟管只在切换目標時更新，沿用固定的 3 個頂點。
+      // 僅在目標孔位改變時重建有厚度的高壓管，讓它沿地面再接到牆上的止水針。
       if (machine.userData.hoseTarget !== port) {
         const start = machine.userData.nozzle.position;
-        const target = port ? port.point.clone().addScaledVector(port.normal, .26).sub(machine.position) : new THREE.Vector3(.72, .24, .45);
-        const mid = start.clone().lerp(target, .52); mid.y = .32;
-        const attribute = machine.userData.hose.geometry.attributes.position;
-        [start, mid, target].forEach((point, i) => attribute.setXYZ(i, point.x, point.y, point.z));
-        attribute.needsUpdate = true;
-        machine.userData.hose.geometry.computeBoundingSphere();
+        const hoseRadius = .024;
+        // 路徑中心線保持在地磚上方，並從牆面外側接近孔口。把終點放在鑽孔深處會讓
+        // 軟管被不透明牆體遮住，畫面看起來像是牆腳到幫浦之間斷開。
+        const floorRouteY = FLOOR_SURFACE.top + hoseRadius + .085;
+        const portNormal = port?.normal?.clone().normalize() || new THREE.Vector3(0, 0, 1);
+        const startWorld = machine.localToWorld(start.clone());
+        const targetWorld = port
+          ? port.point.clone().addScaledVector(portNormal, .09)
+          : machine.localToWorld(new THREE.Vector3(.82, .08, -.72));
+        const target = machine.worldToLocal(targetWorld.clone());
+        const lowerStart = machine.worldToLocal(new THREE.Vector3(startWorld.x + .22, floorRouteY, startWorld.z + .2));
+        const floorRoute = machine.worldToLocal(new THREE.Vector3(
+          (startWorld.x + targetWorld.x) / 2,
+          floorRouteY,
+          (startWorld.z + targetWorld.z) / 2,
+        ));
+        const wallApproachWorld = port
+          ? new THREE.Vector3(port.point.x, floorRouteY, port.point.z).addScaledVector(portNormal, .09)
+          : targetWorld.clone();
+        const wallApproach = machine.worldToLocal(wallApproachWorld);
+        const curve = new THREE.CatmullRomCurve3([start.clone(), lowerStart, floorRoute, wallApproach, target.clone()]);
+        // 非均勻控制點的 Catmull–Rom 曲線會在出料口落地轉彎時向下過衝；
+        // 限制每次取樣的高度，避免管線中心線與管徑穿入地磚或樓板。
+        const sampleUnclamped = curve.getPoint.bind(curve);
+        curve.getPoint = (t, optionalTarget) => {
+          const point = sampleUnclamped(t, optionalTarget);
+          point.y = Math.max(point.y, floorRouteY);
+          return point;
+        };
+        machine.userData.hose.geometry.dispose();
+        machine.userData.hose.geometry = new THREE.TubeGeometry(curve, 64, hoseRadius, 8, false);
+        machine.userData.hoseTerminal.position.copy(target);
+        machine.userData.hoseTerminal.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), curve.getTangent(1).normalize());
+        machine.userData.hoseTerminal.visible = Boolean(port);
         machine.userData.hoseTarget = port;
+        machine.userData.hoseCurve = curve;
       }
       machine.userData.hose.visible = visible;
     }
 
     function addPort(hit) {
-      const physical = state.scenario === 'crack' ? drillCell(engine.state, hit.point) : null;
+      const drillOutward = getDrillOutward(hit.normal, state.drillDirection, 45);
+      const physical = state.scenario === 'crack' ? drillCell(engine.state, hit.point, { direction: state.drillDirection, angleDeg: 45 }) : null;
       if (state.scenario === 'crack' && !physical) return null;
       const id = physical?.id ?? state.nextPortId++;
-      const marker = new THREE.Mesh(reusable.portCylinder, mat(colors.marker, { emissive: 0x4f0f20, emissiveIntensity: .3, roughness: .38, metalness: .2 }));
-      marker.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), hit.normal);
-      marker.position.copy(hit.point).addScaledVector(hit.normal, .08);
+      // A drilled port is shown as a recessed cavity: dark back, short inner wall,
+      // chipped edge and a status ring set behind the wall plane. Nothing protrudes.
+      const marker = new THREE.Group();
+      const surfaceFrame = new THREE.Quaternion().setFromUnitVectors(outward, hit.normal);
+      marker.quaternion.copy(surfaceFrame);
+      marker.position.copy(hit.point).addScaledVector(hit.normal, -.002);
       marker.name = `port-${id}`;
+      // 斜孔在牆面上的入口呈橢圓；深處孔底依鑽孔方向平移，避免看成垂直穿入。
+      // 所有零件都留在牆面內側，避免洞口或外露止水針變成凸出的圓柱。
+      const bore = new THREE.Group();
+      const localTangent = surfaceTangent(hit.normal, state.drillDirection).applyQuaternion(surfaceFrame.clone().invert());
+      bore.rotation.z = Math.atan2(localTangent.y, localTangent.x) - Math.PI / 2;
+      const ellipse = Math.max(.35, Math.cos(THREE.MathUtils.degToRad(45)));
+      const rimMaterial = basic(0x6e6254, { side: THREE.DoubleSide, depthTest: false, depthWrite: false });
+      const innerMaterial = basic(0x101820, { side: THREE.DoubleSide, depthTest: false, depthWrite: false });
+      const edge = new THREE.Mesh(new THREE.RingGeometry(.066, .09, 28), rimMaterial);
+      edge.scale.y = ellipse; edge.position.z = -.001; edge.renderOrder = 10; edge.name = 'drilled-chipped-edge';
+      const innerWall = new THREE.Mesh(new THREE.RingGeometry(.048, .065, 28), basic(0x3b4040, { side: THREE.DoubleSide, depthTest: false, depthWrite: false }));
+      innerWall.scale.y = ellipse; innerWall.position.z = -.012; innerWall.renderOrder = 11; innerWall.name = 'drilled-inner-wall';
+      const bottom = new THREE.Mesh(new THREE.CircleGeometry(.048, 28), innerMaterial);
+      bottom.scale.y = ellipse;
+      const depth = .046;
+      bottom.position.set(localTangent.x * depth, localTangent.y * depth, -depth);
+      bottom.renderOrder = 12; bottom.name = 'recessed-hole-bottom';
+      const statusRing = new THREE.Mesh(new THREE.TorusGeometry(.074, .002, 6, 28), basic(colors.marker, { depthTest: false, depthWrite: false }));
+      statusRing.scale.y = ellipse; statusRing.position.z = -.02; statusRing.renderOrder = 13; statusRing.name = 'hole-status-ring';
+      bore.add(edge, innerWall, bottom, statusRing);
+      marker.add(bore);
+      marker.userData.statusRing = statusRing;
+      marker.userData.bore = bore;
       const label = makeTextSprite(`#${id}`);
-      label.scale.set(.9, .225, 1);
-      label.position.set(0, .5, 0);
+      label.scale.set(.72, .18, 1);
+      label.position.set(0, .24, -.001);
       marker.add(label);
       marker.userData.label = label;
       portGroup.add(marker);
-      const port = { id, point: hit.point.clone(), normal: hit.normal.clone(), surface: hit.surface, marker, hitPath: isPortOnPath(hit.point, hit.surface), drilled: true, inserted: false, needle: null, volume: 0, material: null, visuals: null };
+      const port = { id, point: hit.point.clone(), normal: hit.normal.clone(), drillOutward, drillDirection: state.drillDirection, drillAngleDeg: 45, surface: hit.surface, marker, hitPath: isPortOnPath(hit.point, hit.surface), drilled: true, inserted: false, needle: null, volume: 0, material: null, visuals: null };
       if (physical) bridge.connectPort(port, id);
       state.ports.push(port);
       return port;
@@ -977,10 +1048,17 @@ import { surfaceTemperatureC } from '../tools/thermalCamera';
 
     function updatePorts() {
       state.ports.forEach((port) => {
-        port.marker.material.color.setHex(port.inserted ? 0x62e4f1 : state.scenario === 'crack' && !simulationControls.view.debug ? 0xf7c76a : port.hitPath ? 0xffc86e : 0xff778b);
-        port.marker.material.emissive.setHex(port === state.selectedPort ? 0x547a80 : 0x172a30);
-        port.marker.scale.setScalar(port === state.selectedPort ? 1.2 : 1);
-        port.marker.userData.label.visible = state.labels;
+        const visualRing = port.marker.userData.statusRing;
+        visualRing.material.color.setHex(port.inserted ? 0x62e4f1 : state.scenario === 'crack' && !simulationControls.view.debug ? 0xf7c76a : port.hitPath ? 0xffc86e : 0xff778b);
+        const physicalPort = state.scenario === 'crack' ? engine.state.repairs.ports.find(item => item.id === port.id) : null;
+        const progress = physicalPort ? physicalPort.drillProgress : 1;
+        const selectionScale = port === state.selectedPort ? 1.12 : 1;
+        port.marker.visible = progress > 0;
+        port.marker.scale.setScalar((.18 + .82 * progress) * selectionScale);
+        visualRing.material.opacity = .45 + progress * .55;
+        visualRing.visible = !port.inserted;
+        port.marker.userData.label.visible = state.labels && !port.inserted;
+        port.marker.userData.bore.visible = !port.inserted;
         if (port.needle) port.needle.visible = port.inserted;
       });
     }
@@ -991,20 +1069,31 @@ import { surfaceTemperatureC } from '../tools/thermalCamera';
       const assembly = new THREE.Group();
       assembly.name = `injection-needle-${port.id}`;
       assembly.position.copy(port.point);
-      assembly.quaternion.setFromUnitVectors(outward, port.normal);
-      const collar = new THREE.Mesh(new THREE.TorusGeometry(.12, .028, 8, 18), basic(0xf7c76a));
-      collar.position.z = .045;
-      const stem = new THREE.Mesh(new THREE.CylinderGeometry(.045, .045, .3, 12), mat(0x9ce9f0, { roughness: .2, metalness: .72 }));
-      stem.rotation.x = Math.PI / 2;
-      stem.position.z = .17;
-      const cap = new THREE.Mesh(new THREE.CylinderGeometry(.105, .105, .12, 12), mat(0x2e5262, { roughness: .35, metalness: .34 }));
-      cap.rotation.x = Math.PI / 2;
-      cap.position.z = .32;
-      assembly.add(collar, stem, cap);
+      assembly.quaternion.setFromUnitVectors(outward, port.drillOutward || port.normal);
+      const steel = mat(0xc3cbd0, { roughness: .22, metalness: .88 });
+      const brass = mat(0xc9944a, { roughness: .3, metalness: .76 });
+      const washer = new THREE.Mesh(new THREE.TorusGeometry(.075, .014, 8, 20), brass);
+      washer.position.z = .018;
+      const barrel = new THREE.Mesh(new THREE.CylinderGeometry(.043, .052, .24, 12), steel);
+      barrel.rotation.x = Math.PI / 2;
+      barrel.position.z = .14;
+      const hexNut = new THREE.Mesh(new THREE.CylinderGeometry(.066, .066, .065, 6), brass);
+      hexNut.rotation.x = Math.PI / 2;
+      hexNut.position.z = .285;
+      const tail = new THREE.Mesh(new THREE.CylinderGeometry(.033, .041, .12, 10), steel);
+      tail.rotation.x = Math.PI / 2;
+      tail.position.z = .37;
+      const hoseBarb = new THREE.Mesh(new THREE.CylinderGeometry(.045, .035, .035, 10), brass);
+      hoseBarb.rotation.x = Math.PI / 2;
+      hoseBarb.position.z = .445;
+      assembly.renderOrder = 20;
+      [washer, barrel, hexNut, tail, hoseBarb].forEach((part) => { part.renderOrder = 20; });
+      assembly.add(washer, barrel, hexNut, tail, hoseBarb);
       needleGroup.add(assembly);
       port.needle = assembly;
       port.inserted = true;
       updatePorts();
+      updateToolCursorFromHit(state.hoverHit);
       return true;
     }
 
@@ -1345,6 +1434,30 @@ import { surfaceTemperatureC } from '../tools/thermalCamera';
     const pickMeshes = [];
     const surfaceNames = { wall: '牆面', floor: '室內地板', ceiling: '天花板', balcony: '陽台地坪', frame: '窗框／窗台', glass: '窗玻璃', blocked: '非操作表面' };
     const outward = new THREE.Vector3(0, 0, 1);
+    const drillDirectionAxes = {
+      up: new THREE.Vector3(0, 1, 0), down: new THREE.Vector3(0, -1, 0),
+      left: new THREE.Vector3(-1, 0, 0), right: new THREE.Vector3(1, 0, 0),
+    };
+    function surfaceTangent(normal, direction) {
+      const n = normal.clone().normalize();
+      let tangent = drillDirectionAxes[direction].clone().addScaledVector(n, -drillDirectionAxes[direction].dot(n));
+      // 頂板正視時世界上下軸會與法線平行，改用目前視角的切線方向維持可操作性。
+      if (tangent.lengthSq() < .001) {
+        const cameraAxis = direction === 'up' || direction === 'down'
+          ? new THREE.Vector3(0, 1, 0).applyQuaternion(camera.quaternion)
+          : new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
+        tangent = cameraAxis.addScaledVector(n, -cameraAxis.dot(n));
+        if (tangent.lengthSq() < .001) tangent.set(1, 0, 0).addScaledVector(n, -n.x);
+      }
+      tangent.normalize();
+      return tangent;
+    }
+    function getDrillOutward(normal, direction, angleDeg = 45) {
+      const n = normal.clone().normalize();
+      const tangent = surfaceTangent(n, direction);
+      const angle = THREE.MathUtils.degToRad(angleDeg);
+      return n.multiplyScalar(Math.cos(angle)).addScaledVector(tangent, -Math.sin(angle)).normalize();
+    }
     const gestures = { pointers: new Map(), primary: null, moved: false, multi: false, pinch: 0, hover: null };
 
     function indexInteractionSurfaces() {
@@ -1466,8 +1579,14 @@ import { surfaceTemperatureC } from '../tools/thermalCamera';
       const port = hit.port;
       toolCursorGroup.position.copy(hit.point);
       toolCursorGroup.quaternion.setFromUnitVectors(outward, hit.normal);
-      drillTool.visible = state.mode === 'drill';
-      needleTool.visible = state.mode === 'insert';
+      const aimedOutward = port?.drillOutward || getDrillOutward(hit.normal, state.drillDirection, 45);
+      const localOutward = aimedOutward.clone().applyQuaternion(toolCursorGroup.quaternion.clone().invert()).normalize();
+      drillTool.quaternion.setFromUnitVectors(outward, localOutward);
+      needleTool.quaternion.setFromUnitVectors(outward, localOutward);
+      // 保留電鑽游標在新孔位與鑽孔動畫上；只在已安裝止水針的孔位隱藏，避免蓋住針尾。
+      const overInstalledNeedle = state.ports.some(item => item.inserted && item.surface === surface && item.point.distanceTo(hit.point) < .42);
+      drillTool.visible = state.mode === 'drill' && !overInstalledNeedle;
+      needleTool.visible = state.mode === 'insert' && !port?.inserted;
       drillTool.userData.label.visible = state.labels && drillTool.visible;
       needleTool.userData.label.visible = state.labels && needleTool.visible;
       if (state.mode === 'insert') {
@@ -1558,9 +1677,18 @@ import { surfaceTemperatureC } from '../tools/thermalCamera';
         state.samples[target] = previous;
         state.sampleTarget = target;
         syncSamples();
-      }, null);
+      }, isCellularScenario(state.scenario) ? engine.checkpoint() : null);
       const sample = { point: hit.point.clone(), normal: hit.normal.clone(), surface: hit.surface, meter: state.meter, reading: meterReading(hit.point, state.meter, hit.surface), time: state.time };
       state.samples[target] = sample;
+      if (isCellularScenario(state.scenario)) {
+        const domain = hit.surface === 'floor' ? 'floor' : hit.surface === 'ceiling' ? 'slab' : 'wall';
+        const point = { x: hit.point.x, y: domain === 'floor' ? hit.point.z - FLOOR_SURFACE.originZ : domain === 'slab' ? 6.65 - hit.point.z : hit.point.y };
+        appendDiagnosticEvidence(engine.state, 'measurement', `${target === 'control' ? '基準點' : '可疑點'}含水量測`, `${state.meter === 'pin' ? '針式' : '非針式'}讀值 ${(sample.reading * 100).toFixed(1)}%；讀值是材質相關的教學指標。`, { domain, position: point, value: sample.reading * 100 });
+        if (simulationControls.view.thermal) {
+          const thermal = thermalAssessment(engine.state, point, domain);
+          if (thermal) appendDiagnosticEvidence(engine.state, 'thermal', '同位置熱像記錄', `表面估算 ${thermal.apparentTemperatureC.toFixed(1)}°C；判讀信心 ${thermal.confidence}%；${thermal.warnings.join('；') || '未觸發環境警示'}。`, { domain, position: point, value: thermal.apparentTemperatureC });
+        }
+      }
       if (target === 'control') state.sampleTarget = 'suspect';
       syncSamples();
       updateMeasurementMarkers();
@@ -1669,6 +1797,7 @@ import { surfaceTemperatureC } from '../tools/thermalCamera';
         }, checkpoint);
         state.selectedPort = port;
         updatePorts();
+        updateToolCursorFromHit(hit);
         if (state.scenario === 'crack') {
           addLog(`孔位 #${port.id} 鑽進中，完成後可固定針頭。`);
           showToast('鑽孔中（2 秒模擬時間），孔位是否有效需灌注後驗證。');
@@ -1946,7 +2075,6 @@ import { surfaceTemperatureC } from '../tools/thermalCamera';
         });
       }
       ui.crackStateField.hidden = state.scenario !== 'crack';
-      [...ui.materialSelect.options].forEach(option => { option.disabled = false; option.textContent = option.textContent.replace(' · TODO', ''); });
       if (state.scenario === 'crack') {
         if (state.mode === 'insert' && port && !port.drilled) { ui.nextStepBtn.disabled = true; ui.operationDetail.textContent = '鑽孔中，請讓時間前進至完成。'; }
       }
@@ -1979,6 +2107,7 @@ import { surfaceTemperatureC } from '../tools/thermalCamera';
       bathroomControls.update(isBathroomScenario(state.scenario), !!state.verification?.active);
       if (bathroomScene?.update(engine.state, isCellularScenario(state.scenario), simulationControls.view.surface, state.cutaway || simulationControls.view.debug)) indexInteractionSurfaces();
       diagnosticControls.update(['drain', 'multi', 'basement'].includes(state.scenario), !!state.verification?.active);
+      diagnosisControls.update(isCellularScenario(state.scenario));
       const migratedNonCrack = isCellularScenario(state.scenario) && state.scenario !== 'crack';
       for (const id of ['rainSlider', 'rainColorPicker', 'windSlider']) $( `#${id}` ).closest('.field').hidden = migratedNonCrack;
       ui.portList.closest('.section').hidden = migratedNonCrack;
@@ -2128,6 +2257,14 @@ import { surfaceTemperatureC } from '../tools/thermalCamera';
 
     $$('.scenario-card').forEach((card) => card.addEventListener('click', () => setScenario(card.dataset.scenario)));
     $$('#modeButtons button').forEach((button) => button.addEventListener('click', () => setMode(button.dataset.mode)));
+    $$('[data-drill-direction]').forEach((button) => button.addEventListener('click', () => {
+      const direction = button.dataset.drillDirection;
+      if (!['up', 'down', 'left', 'right'].includes(direction)) return;
+      state.drillDirection = direction;
+      updateScenarioLabels();
+      updateToolCursorFromHit(state.hoverHit);
+      if (gestures.hover) showHover(gestures.hover);
+    }));
     $$('#crackStateButtons button').forEach((button) => button.addEventListener('click', () => {
       state.crackState = button.dataset.crack;
       state.repairBaseline = null;
@@ -2137,6 +2274,7 @@ import { surfaceTemperatureC } from '../tools/thermalCamera';
       updateDiagnosis();
     }));
     ui.rainSlider.addEventListener('input', () => { state.rain = Number(ui.rainSlider.value) / 100; ui.rainValue.textContent = `${ui.rainSlider.value}%`; state.repairBaseline = null; state.verification = null; updateRainField(); refreshUI(); });
+    ui.rainSlider.addEventListener('change', () => { if (isCellularScenario(state.scenario)) appendDiagnosticEvidence(engine.state, 'source-event', `降雨強度調整至 ${ui.rainSlider.value}%`, '記錄降雨條件；觀察事件後的入水與牆體濕度變化。', { value: Number(ui.rainSlider.value) / 100 }); });
     ui.rainColorPicker.addEventListener('input', () => setRainColor(ui.rainColorPicker.value));
     ui.rainColorPicker.addEventListener('change', () => {
       setRainColor(ui.rainColorPicker.value);
@@ -2149,11 +2287,26 @@ import { surfaceTemperatureC } from '../tools/thermalCamera';
       showToast(`雨水顏色已還原為預設：${defaultRainColor.toUpperCase()}`, 'good');
     });
     ui.windSlider.addEventListener('input', () => { state.wind = Number(ui.windSlider.value) / 100; ui.windValue.textContent = `${ui.windSlider.value}%`; state.repairBaseline = null; state.verification = null; refreshUI(); });
+    ui.windSlider.addEventListener('change', () => { if (isCellularScenario(state.scenario)) appendDiagnosticEvidence(engine.state, 'source-event', `側風強度調整至 ${ui.windSlider.value}%`, '記錄風壓條件，和降雨事件一起比較。', { value: Number(ui.windSlider.value) / 100 }); });
     ui.timeSlider.addEventListener('input', () => { state.timeScale = Number(ui.timeSlider.value); setRunning(state.timeScale > 0); refreshUI(); });
     ui.playPauseBtn.addEventListener('click', () => { setRunning(!state.running); refreshUI(); });
     ui.resetBtn.addEventListener('click', resetState);
     ui.meterSelect.addEventListener('change', () => { state.meter = ui.meterSelect.value; addLog(`水分儀切換：${state.meter === 'pin' ? '針式' : '非針式'}；已記錄數據保留原儀器標記。`); refreshUI(); });
     ui.materialSelect.addEventListener('change', () => { state.material = ui.materialSelect.value; addLog(`新注入材料：${materialProfiles[state.material].label}；已注入孔位的材料保留。`); refreshUI(); });
+    ui.drillModelSelect.addEventListener('change', () => {
+      const drillTool = toolCursorGroup.userData.drill;
+      const externalAvailable = !!externalAssets.drillTool;
+      if (ui.drillModelSelect.value === 'external' && !externalAvailable) {
+        ui.drillModelSelect.value = state.drillModel;
+        showToast('請先載入外部素材，再選擇外部電鑽模型。', 'warn');
+        return;
+      }
+      state.drillModel = ui.drillModelSelect.value === 'external' ? 'external' : 'procedural';
+      state.drillModelExplicit = true;
+      drillTool.userData.externalModelAnchor.visible = state.drillModel === 'external';
+      drillTool.userData.proceduralBody.visible = state.drillModel !== 'external';
+      showToast(state.drillModel === 'external' ? '已切換外部 3D 電鑽外觀。' : '已切換內建程序電鑽外觀。', 'good');
+    });
     ui.sourceFixBtn.addEventListener('click', sourceRepair);
     function chooseSample(target) { state.sampleTarget = target; setMode('inspect'); refreshUI(); }
     function toggleCutaway() { state.cutaway = !state.cutaway; hideToolCursor(); updateCutawayVisual(); }
@@ -2312,11 +2465,16 @@ import { surfaceTemperatureC } from '../tools/thermalCamera';
     // 初始化與動畫迴圈
     // =========================
     createScene();
+    document.addEventListener('simulator:languagechange', () => {
+      refreshTextSprites();
+      updateScenarioFeatureVisibility();
+    });
     const fieldAnisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
     fieldRenderer = createMoistureField(world, 'wall', fieldAnisotropy);
     ceilingFieldRenderer = createMoistureField(world, 'slab', fieldAnisotropy);
     floorFieldRenderer = createMoistureField(world, 'floor', fieldAnisotropy);
     document.getElementById('loadAssetsBtn').addEventListener('click', (event) => { event.currentTarget.disabled = true; loadExternalAssets(); });
+    loadDrillAsset();
     updateCamera();
     refreshUI();
     setScenario('crack', true);
@@ -2326,6 +2484,68 @@ import { surfaceTemperatureC } from '../tools/thermalCamera';
     if (import.meta.env.DEV && new URLSearchParams(location.search).has('test')) {
       window.__simTest = {
         snapshot: () => engine.checkpoint(),
+        portVisual: (id) => {
+          const port = state.ports.find(item => item.id === id);
+          if (!port) return [];
+          const inset = port.marker.position.clone().sub(port.point).dot(port.normal);
+          const parts = [];
+          port.marker.traverse(child => {
+            if (!child.isMesh) return;
+            const extent = child.name === 'hole-status-ring' ? child.geometry.parameters.tube : 0;
+            parts.push({ name: child.name, z: child.position.z, frontExtent: inset + child.position.z + extent });
+          });
+          return parts;
+        },
+        drillAim: () => ({ direction: state.drillDirection, angleDeg: 45 }),
+        drillPreviewAxis: () => {
+          const axis = new THREE.Vector3(0, 0, 1).applyQuaternion(toolCursorGroup.userData.drill.getWorldQuaternion(new THREE.Quaternion()));
+          return { x: axis.x, y: axis.y, z: axis.z };
+        },
+        toolState: () => ({ mode: state.mode, groupVisible: toolCursorGroup.visible, drillVisible: toolCursorGroup.userData.drill.visible, needleCursorVisible: toolCursorGroup.userData.needle.visible, installedNeedleVisible: state.selectedPort?.needle?.visible ?? false, selectedPortId: state.selectedPort?.id ?? null, selectedPortDrilled: state.selectedPort?.drilled ?? null, hoverSurface: state.hoverHit?.surface ?? null }),
+        injectionMachineState: () => {
+          const machine = injectionMachineGroup.userData.machine;
+          const names = [];
+          machine?.traverse(object => { if (object.name) names.push(object.name); });
+          const hosePath = machine?.userData.hoseCurve?.getPoints(100) || [];
+          const hoseWorldPoints = hosePath.map(point => machine.localToWorld(point.clone()));
+          const hoseMinFloorClearance = hoseWorldPoints.length
+            ? Math.min(...hoseWorldPoints.map(point => point.y - .024 - FLOOR_SURFACE.top))
+            : null;
+          const selectedPort = state.injection.targetPort;
+          const expectedHoseTarget = selectedPort
+            ? selectedPort.point.clone().addScaledVector(selectedPort.normal.clone().normalize(), .09)
+            : null;
+          return {
+            visible: injectionMachineGroup.visible,
+            names,
+            hoseVertices: machine?.userData.hose?.geometry?.attributes?.position?.count ?? 0,
+            hoseTerminalVisible: machine?.userData.hoseTerminal?.visible ?? false,
+            hoseTerminalWorld: machine?.userData.hoseTerminal?.getWorldPosition(new THREE.Vector3()).toArray() ?? null,
+            selectedPort: selectedPort?.id ?? null,
+            hoseMinFloorClearance,
+            hosePortOffset: selectedPort && machine?.userData.hoseTerminal
+              ? machine.userData.hoseTerminal.getWorldPosition(new THREE.Vector3()).sub(selectedPort.point).dot(selectedPort.normal.clone().normalize())
+              : null,
+            hoseTargetGap: expectedHoseTarget && machine?.userData.hoseTerminal
+              ? machine.userData.hoseTerminal.getWorldPosition(new THREE.Vector3()).distanceTo(expectedHoseTarget)
+              : null,
+            pressureNeedleVisible: Boolean(machine?.userData.gaugeNeedle),
+          };
+        },
+        externalDrillBitAxis: () => {
+          const model = externalAssets.drillTool;
+          return model ? new THREE.Vector3(-1, 0, 0).applyQuaternion(model.getWorldQuaternion(new THREE.Quaternion())).normalize().toArray() : null;
+        },
+        addDrainBranch: (id = 'leaking-drain-secondary') => {
+          const current = engine.state;
+          const source = current.waterSources.find(item => item.kind === 'drain');
+          const pipe = source?.pipeId && current.pipes.find(item => item.id === source.pipeId);
+          if (!source || !pipe || current.pipes.some(item => item.id === id)) return false;
+          const rowOffset = current.wall.cols * 2;
+          current.pipes.push({ ...structuredClone(pipe), id, cells: pipe.cells.map(cell => cell + rowOffset), route: pipe.route.map(point => ({ x: point.x + .8, y: point.y })) });
+          current.waterSources.push({ ...structuredClone(source), pipeId: id, cell: source.cell + rowOffset, position: { x: source.position.x + .8, y: source.position.y }, flow: 0, unsealedFlow: 0 });
+          return true;
+        },
         project: (x, y, surface = 'wall') => { const p = (surface === 'floor' ? new THREE.Vector3(x, FLOOR_SURFACE.top, FLOOR_SURFACE.originZ + y) : surface === 'ceiling' ? new THREE.Vector3(x, 5.99, 6.65 - y) : new THREE.Vector3(x, y, .65)).project(camera); const r = ui.canvas.getBoundingClientRect(); return { x: r.left + (p.x + 1) * r.width / 2, y: r.top + (1 - p.y) * r.height / 2 }; },
       };
     }

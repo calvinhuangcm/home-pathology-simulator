@@ -23,7 +23,7 @@ This is a simulation, not an animation demo. Never generate random moisture read
 - Indoor floor has its own floor grid, finite floorTests and floorJunctions. Floor local depth is world z - 0.65; do not mix it with wall height or the upstairs slab.
 - Keep floor telemetry separate from wall/ceiling repair baselines. Active floor water tests must finish before source-repair verification. Legacy wall demos do not supply the new floor network until explicitly migrated.
 
-## 現場診斷知識（依昱揚工程課堂講義整理）
+## 現場診斷知識
 
 - 先診斷來源，再選修法；症狀位置不一定是進水點。用降雨、用水／排水事件、時間變化與量測趨勢交叉判斷，不可只靠壁癌外觀或單次含水讀值下結論。
 - 情境可區分給水管（通常持續承壓）、排水管（主要在排水使用時有水流）及非管線問題。非管線來源至少涵蓋結構裂縫、二次施工縫、蜂巢／孔隙、積水或防水層失效、窗框接縫與地下室負水壓；複合問題可以同時存在。

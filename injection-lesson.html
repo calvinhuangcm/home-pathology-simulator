@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="以互動牆體剖面理解鑽孔角度、深度、針頭位置與灌注流路。">
+  <link rel="icon" href="data:,">
+  <title>灌注教學 · 壁癌模擬器</title>
+  <link rel="stylesheet" href="./src/lesson/styles.css">
+</head>
+<body>
+  <div class="lesson-app">
+    <header class="lesson-header">
+      <a class="back-link" href="./" aria-label="返回壁癌模擬器">← <span>返回模擬器</span></a>
+      <div class="lesson-heading">
+        <p>BUILDING INSPECTION · 教學台</p>
+        <h1>鑽孔與灌注流路</h1>
+      </div>
+      <span class="header-tag"><i></i>互動幾何模型</span>
+    </header>
+
+    <main class="lesson-layout">
+      <section class="scene-card" aria-labelledby="sceneTitle">
+        <div class="scene-card-heading">
+          <div>
+            <p class="eyebrow">3D WALL SECTION</p>
+            <h2 id="sceneTitle">牆體斜視剖面</h2>
+            <p class="subheading">直接拖曳畫面中的注射器來轉向、調角；孔口固定，針頭沿鑽孔進入。</p>
+          </div>
+          <div class="connect-badge" id="connectionBadge" data-connected="false" role="status">
+            <span class="connect-dot"></span><strong id="connectionTitle">尚未接通裂縫</strong>
+          </div>
+        </div>
+
+        <div class="view-mode" role="group" aria-label="選擇剖面顯示">
+          <button type="button" data-view="drill" aria-pressed="false">鑽頭姿態</button>
+          <button type="button" data-view="needle" aria-pressed="true">注射器操控</button>
+          <button type="button" data-view="flow" aria-pressed="false">灌注流路</button>
+        </div>
+
+        <div class="scene-wrap">
+          <svg id="lessonScene" viewBox="0 0 860 520" role="img" aria-labelledby="svgTitle svgDesc">
+            <title id="svgTitle">鑽孔與灌注的牆體立體剖面</title>
+            <desc id="svgDesc">牆面表層、混凝土內部、斜向鑽孔、注射針與裂縫水路的教學示意。</desc>
+            <defs>
+              <linearGradient id="frontConcrete" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0" stop-color="#d2d5d4" />
+                <stop offset=".55" stop-color="#aeb5b5" />
+                <stop offset="1" stop-color="#939c9e" />
+              </linearGradient>
+              <linearGradient id="sideConcrete" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0" stop-color="#929b9d" />
+                <stop offset="1" stop-color="#626e74" />
+              </linearGradient>
+              <linearGradient id="topConcrete" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0" stop-color="#e0e1dd" />
+                <stop offset="1" stop-color="#afb6b4" />
+              </linearGradient>
+              <linearGradient id="steel" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" stop-color="#f2f7f7" />
+                <stop offset=".45" stop-color="#697983" />
+                <stop offset=".75" stop-color="#d8e2e5" />
+                <stop offset="1" stop-color="#46545c" />
+              </linearGradient>
+              <radialGradient id="recess" cx="35%" cy="30%">
+                <stop offset="0" stop-color="#172128" />
+                <stop offset=".72" stop-color="#303c42" />
+                <stop offset="1" stop-color="#697579" />
+              </radialGradient>
+              <pattern id="aggregate" width="44" height="38" patternUnits="userSpaceOnUse">
+                <circle cx="7" cy="11" r="1.4" fill="#56636a" opacity=".34" />
+                <circle cx="30" cy="6" r="1" fill="#eef0eb" opacity=".8" />
+                <circle cx="19" cy="29" r="1.7" fill="#596469" opacity=".3" />
+                <path d="M37 22l2 1M4 34l2-1M26 17l1-2" stroke="#657176" stroke-width="1" opacity=".28" />
+              </pattern>
+              <filter id="softShadow" x="-30%" y="-30%" width="160%" height="160%">
+                <feGaussianBlur stdDeviation="8" />
+              </filter>
+              <marker id="arrowHead" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                <path d="M0 0L10 5L0 10z" fill="#e4a64e" />
+              </marker>
+            </defs>
+            <ellipse cx="420" cy="467" rx="280" ry="20" fill="#03111c" opacity=".5" filter="url(#softShadow)" />
+            <g id="wallGeometry"></g>
+            <g id="crackGeometry"></g>
+            <g id="boreGeometry"></g>
+            <g id="fluidGeometry"></g>
+            <g id="toolGeometry"></g>
+            <g id="annotationGeometry"></g>
+          </svg>
+          <div class="scene-legend">
+            <span><i class="legend-crack"></i>裂縫通道</span>
+            <span><i class="legend-bore"></i>鑽孔凹槽</span>
+            <span><i class="legend-fluid"></i>注入材料</span>
+          </div>
+        </div>
+
+        <div class="scene-footer">
+          <span id="sceneFeedback">調整鑽孔方向與深度，觀察孔軸是否接近裂縫。</span>
+          <span class="dimension-note">牆厚／裂縫為教學比例示意</span>
+        </div>
+      </section>
+
+      <aside class="control-column">
+        <section class="control-card">
+          <div class="card-title"><div><p class="eyebrow">01 · AIM THE INJECTOR</p><h2>握住注射器調方向</h2></div><span class="number-tag">可拖曳</span></div>
+          <div class="range-field">
+            <label for="azimuthSlider"><span>方位角 <small>沿牆面轉向</small></span><output id="azimuthValue">105°</output></label>
+            <input id="azimuthSlider" type="range" min="0" max="359" step="1" value="105">
+            <div class="range-ends"><span>0° 向上</span><span>90° 向右</span><span>180° 向下</span><span>270° 向左</span></div>
+          </div>
+          <div class="range-field">
+            <label for="tiltSlider"><span>偏轉角 <small>相對牆面法線</small></span><output id="tiltValue">45°</output></label>
+            <input id="tiltSlider" type="range" min="0" max="85" step="1" value="45">
+            <div class="range-ends"><span>0° 垂直入牆</span><span>85° 接近平行牆面</span></div>
+          </div>
+          <div class="range-field">
+            <label for="boreDepthSlider"><span>鑽孔深度 <small>沿孔軸量測</small></span><output id="boreDepthValue">18 cm</output></label>
+            <input id="boreDepthSlider" type="range" min="5" max="30" step="0.5" value="18">
+            <div class="range-ends"><span>5 cm</span><span>30 cm</span></div>
+          </div>
+          <p class="field-note">拖曳畫面中的注射器握把即可直接轉向；方位角與偏轉角滑桿可再微調。</p>
+        </section>
+
+        <section class="control-card">
+          <div class="card-title"><div><p class="eyebrow">02 · NEEDLE POSITION</p><h2>注射針位置</h2></div><span class="number-tag">可調</span></div>
+          <div class="range-field">
+            <label for="needleDepthSlider"><span>針頭插入深度 <small>從孔口沿孔軸量</small></span><output id="needleDepthValue">15 cm</output></label>
+            <input id="needleDepthSlider" type="range" min="0" max="18" step="0.5" value="15">
+            <div class="range-ends"><span>孔口</span><span id="needleDepthMax">18 cm</span></div>
+          </div>
+          <div class="needle-tip-readout"><span>目前孔軸交會深度</span><strong id="junctionValue">—</strong></div>
+          <p class="field-note" id="needleGuidance">針尖位置需與孔內裂縫交會區配合；移動滑桿可看出流體從哪裡開始。</p>
+        </section>
+
+        <section class="control-card flow-card">
+          <div class="card-title"><div><p class="eyebrow">03 · INJECTION FLOW</p><h2>灌注觀察</h2></div><span class="live-tag" id="flowStatus">待開始</span></div>
+          <div class="flow-metrics">
+            <div><span>注入量</span><strong id="volumeValue">0 <small>mL</small></strong></div>
+            <div><span>裂縫覆蓋</span><strong id="coverageValue">0<small>%</small></strong></div>
+          </div>
+          <div class="coverage-track" aria-label="裂縫流路覆蓋程度"><i id="coverageBar"></i></div>
+          <p class="flow-explanation" id="flowExplanation">啟動後，流體會從針尖沿孔道前進；只有鑽孔接近裂縫時才會進入裂縫通道。</p>
+          <div class="flow-actions">
+            <button type="button" class="start-button" id="injectionButton">▶ 開始灌注</button>
+            <button type="button" class="reset-button" id="resetLessonButton">重設</button>
+          </div>
+        </section>
+
+        <p class="safety-note">教學幾何模型，角度、孔深與材料流路皆為示意，不是通用施工參數。現場作業須由合格人員依產品說明評估，使用護目與呼吸防護、控制鑽孔粉塵及高溫鑽頭並保持通風；避免化學品接觸眼睛與皮膚。高壓作業勿站在止水針或接頭軸線前，機具壓力應依產品額定資料確認。</p>
+      </aside>
+    </main>
+  </div>
+  <script type="module" src="./src/lesson/main.ts"></script>
+</body>
+</html>

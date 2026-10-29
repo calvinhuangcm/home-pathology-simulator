@@ -8,6 +8,20 @@ export function createExternalAssets(context) {
       const finishedCount = loadedCount + failedCount;
       if (!ui.assetStatus) return;
 
+      if (!externalAssets.fullLoadRequested) {
+        if (externalAssets.loaded.drillTool) {
+          ui.assetStatus.className = 'pill';
+          ui.assetStatus.innerHTML = '<i class="dot"></i>Poly Haven Drill 01 已載入';
+        } else if (externalAssets.loading.drillTool) {
+          ui.assetStatus.className = 'pill warn';
+          ui.assetStatus.innerHTML = '<i class="dot"></i>Poly Haven Drill 01 載入中';
+        } else if (externalAssets.failed.drillTool) {
+          ui.assetStatus.className = 'pill warn';
+          ui.assetStatus.innerHTML = '<i class="dot"></i>電鑽使用內建程序模型';
+        }
+        return;
+      }
+
       if (finishedCount < keys.length) {
         ui.assetStatus.className = 'pill warn';
         ui.assetStatus.innerHTML = `<i class="dot"></i>外部素材 ${loadedCount}/${keys.length} 載入中`;
@@ -16,7 +30,7 @@ export function createExternalAssets(context) {
         ui.assetStatus.innerHTML = '<i class="dot"></i>外部模型＋貼圖已載入';
         if (!externalAssets.statusLogged) {
           externalAssets.statusLogged = true;
-          addLog('外部素材就緒：室內粉光、夾層磚紋、電鑽與灌注泵浦模型已套用。', 'good');
+          addLog('外觀素材就緒：牆面貼圖與 Poly Haven Drill 01 電鑽模型已載入。', 'good');
         }
       } else if (loadedCount > 0) {
         ui.assetStatus.className = 'pill warn';
@@ -38,6 +52,7 @@ export function createExternalAssets(context) {
     function markExternalAsset(key, success) {
       externalAssets.loaded[key] = success;
       externalAssets.failed[key] = !success;
+      if (externalAssets.loading?.[key] !== undefined) externalAssets.loading[key] = false;
       const keys = Object.keys(externalAssets.loaded);
       if (externalAssets.timeout && keys.every((asset) => externalAssets.loaded[asset] || externalAssets.failed[asset])) {
         clearTimeout(externalAssets.timeout);
@@ -132,41 +147,77 @@ export function createExternalAssets(context) {
       const anchor = drill?.userData.externalModelAnchor;
       if (!anchor || !gltf?.scene) return;
 
-      const model = setExternalModelSurface(gltf.scene, 'external-cc0-cordless-combi-drill');
+      const model = setExternalModelSurface(gltf.scene, 'polyhaven-drill-01-cc0');
       const box = new THREE.Box3().setFromObject(model);
       const size = box.getSize(new THREE.Vector3());
       const center = box.getCenter(new THREE.Vector3());
-      const scale = .8 / Math.max(size.y, size.z, .001);
+      // Front-view inspection foreshortens the tool along its drilling axis; enlarge the model so it remains recognizable at 1280px and tablet widths.
+      const scale = 1.2 / Math.max(size.x, size.y, .001);
       model.scale.setScalar(scale);
-      // 來源模型的 +Z 是鑽頭朝向；轉向牆面，並把鑽頭尖端放在游標接觸面附近。
-      model.rotation.y = Math.PI;
-      model.position.set(-center.x * scale, -box.min.y * scale, .1 + box.max.z * scale);
+      // 水平反轉 180°：將模型的 -X 鑽頭端轉到局部 -Z，朝向牆內；同時讓鑽尖留在牆面前緣。
+      model.rotation.y = -Math.PI / 2;
+      model.position.set(-center.z * scale, -box.min.y * scale, .28 - box.min.x * scale);
       anchor.add(model);
-      anchor.visible = true;
-      drill.userData.proceduralBody.visible = false;
+      const modelOption = ui.drillModelSelect?.querySelector('option[value="external"]');
+      if (modelOption) { modelOption.disabled = false; modelOption.textContent = 'Poly Haven Drill 01（CC0）'; }
+      // 載入成功後預設切換為真實鑽孔機模型；若使用者在載入期間明確選了程序模型，尊重其選擇。
+      if (!state.drillModelExplicit) {
+        state.drillModel = 'external';
+        if (ui.drillModelSelect) ui.drillModelSelect.value = 'external';
+      }
+      const useExternalModel = state.drillModel === 'external';
+      anchor.visible = useExternalModel;
+      drill.userData.proceduralBody.visible = !useExternalModel;
       externalAssets.drillTool = model;
     }
 
-    function installExternalInjectionPump(gltf) {
-      const machine = injectionMachineGroup.userData.machine;
-      const anchor = machine?.userData.externalPumpAnchor;
-      if (!anchor || !gltf?.scene) return;
+    function ensureGltfLoader() {
+      if (THREE.GLTFLoader) return Promise.resolve(true);
+      if (externalAssets.gltfLoaderPromise) return externalAssets.gltfLoaderPromise;
 
-      const model = setExternalModelSurface(gltf.scene, 'external-cc0-injection-pump');
-      const box = new THREE.Box3().setFromObject(model);
-      const size = box.getSize(new THREE.Vector3());
-      const center = box.getCenter(new THREE.Vector3());
-      const scale = .72 / Math.max(size.x, size.y, size.z, .001);
-      model.scale.setScalar(scale);
-      model.position.set(-center.x * scale, -box.min.y * scale, -center.z * scale);
-      anchor.add(model);
-      anchor.visible = true;
-      // 隱藏重複的簡化泵頭方塊，保留機台、材料桶、壓力表與注射軟管。
-      if (machine.userData.pumpHead) machine.userData.pumpHead.visible = false;
-      externalAssets.injectionPump = model;
+      externalAssets.gltfLoaderPromise = new Promise((resolve) => {
+        const script = document.createElement('script');
+        script.src = 'https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js';
+        script.async = true;
+        const finish = (available) => {
+          clearTimeout(timer);
+          if (!available) externalAssets.gltfLoaderPromise = null;
+          resolve(available);
+        };
+        const timer = setTimeout(() => finish(false), 10000);
+        script.onload = () => finish(!!THREE.GLTFLoader);
+        script.onerror = () => finish(false);
+        document.head.append(script);
+      });
+      return externalAssets.gltfLoaderPromise;
+    }
+
+    function loadDrillAsset() {
+      if (externalAssets.loaded.drillTool || externalAssets.loading.drillTool) return;
+      externalAssets.loading.drillTool = true;
+      externalAssets.failed.drillTool = false;
+      refreshExternalAssetStatus();
+
+      ensureGltfLoader().then((available) => {
+        if (!available || !THREE.GLTFLoader) {
+          markExternalAsset('drillTool', false);
+          return;
+        }
+        const loader = new THREE.GLTFLoader();
+        loader.load(externalAssetUrls.drillTool, (gltf) => {
+          try {
+            installExternalDrill(gltf);
+            markExternalAsset('drillTool', true);
+          } catch (error) {
+            console.error('Poly Haven Drill 01 could not be installed.', error);
+            markExternalAsset('drillTool', false);
+          }
+        }, undefined, () => markExternalAsset('drillTool', false));
+      });
     }
 
     async function loadExternalAssets() {
+      externalAssets.fullLoadRequested = true;
       refreshExternalAssetStatus();
       // 外部載入器採非阻塞載入；離線或 CDN 卡住時，本地場景與工具仍立即可操作。
       externalAssets.timeout = setTimeout(() => {
@@ -196,33 +247,18 @@ export function createExternalAssets(context) {
         markExternalAsset('brickBump', true);
       }, undefined, () => markExternalAsset('brickBump', false));
 
-      if (!THREE.GLTFLoader) await new Promise((resolve) => {
-        const script = document.createElement('script');
-        script.src = 'https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js';
-        script.async = true;
-        const timer = setTimeout(() => resolve(false), 10000);
-        script.onload = () => { clearTimeout(timer); resolve(true); };
-        script.onerror = () => { clearTimeout(timer); resolve(false); };
-        document.head.append(script);
-      });
-      if (!THREE.GLTFLoader) {
+      const hasGltfLoader = await ensureGltfLoader();
+      if (!hasGltfLoader || !THREE.GLTFLoader) {
         markExternalAsset('materialBottle', false);
-        markExternalAsset('drillTool', false);
-        markExternalAsset('injectionPump', false);
         return;
       }
       const gltfLoader = new THREE.GLTFLoader();
-      [
-        ['materialBottle', installExternalMaterialBottle],
-        ['drillTool', installExternalDrill],
-        ['injectionPump', installExternalInjectionPump],
-      ].forEach(([key, install]) => {
-        gltfLoader.load(externalAssetUrls[key], (gltf) => {
-          install(gltf);
-          markExternalAsset(key, true);
-        }, undefined, () => markExternalAsset(key, false));
-      });
+      gltfLoader.load(externalAssetUrls.materialBottle, (gltf) => {
+        installExternalMaterialBottle(gltf);
+        markExternalAsset('materialBottle', true);
+      }, undefined, () => markExternalAsset('materialBottle', false));
+      loadDrillAsset();
     }
 
-  return { loadExternalAssets };
+  return { loadDrillAsset, loadExternalAssets };
 }

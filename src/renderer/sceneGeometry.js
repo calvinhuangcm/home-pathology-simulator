@@ -1,4 +1,5 @@
 // Existing Three.js geometry and Canvas fallback assets retained from the prototype.
+import { translate } from '../ui/i18n';
 export function createSceneGeometry(context) {
   const { state, reusable, colors, mat, basic, randomSeeded, materialProfiles, architecture, toolCursorGroup, injectionMachineGroup, rainGroup, labelGroup } = context;
     function createFallbackSurfaceMaps(kind) {
@@ -119,10 +120,7 @@ export function createSceneGeometry(context) {
       return line;
     }
 
-    function makeTextSprite(text, color = '#dcefff', background = 'rgba(5,18,30,.84)') {
-      const canvas = document.createElement('canvas');
-      canvas.width = 512;
-      canvas.height = 128;
+    function paintTextLabel(canvas, text, color, background) {
       const context = canvas.getContext('2d');
       context.clearRect(0, 0, canvas.width, canvas.height);
       context.fillStyle = background;
@@ -133,17 +131,37 @@ export function createSceneGeometry(context) {
       context.lineWidth = 2;
       context.stroke();
       context.fillStyle = color;
-      context.font = `700 ${text.length <= 4 ? 86 : text.length <= 10 ? 48 : 30}px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
+      context.font = `700 ${text.length <= 4 ? 86 : text.length <= 10 ? 48 : 30}px -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans JP", sans-serif`;
       context.textAlign = 'center';
       context.textBaseline = 'middle';
       context.fillText(text, 256, 62);
+    }
+
+    function makeTextSprite(text, color = '#dcefff', background = 'rgba(5,18,30,.84)') {
+      const canvas = document.createElement('canvas');
+      canvas.width = 512;
+      canvas.height = 128;
+      paintTextLabel(canvas, translate(text), color, background);
       const texture = new THREE.CanvasTexture(canvas);
       texture.minFilter = THREE.LinearFilter;
       const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true, depthTest: false }));
       sprite.scale.set(2.2, .55, 1);
       sprite.userData.canvas = canvas;
       sprite.userData.texture = texture;
+      sprite.userData.sourceText = text;
+      sprite.userData.labelColor = color;
+      sprite.userData.labelBackground = background;
       return sprite;
+    }
+
+    function refreshTextSprites() {
+      const visited = new Set();
+      [architecture, toolCursorGroup, injectionMachineGroup, labelGroup].forEach(group => group?.traverse(object => {
+        if (!object.isSprite || !object.userData?.canvas || visited.has(object)) return;
+        visited.add(object);
+        paintTextLabel(object.userData.canvas, translate(object.userData.sourceText || ''), object.userData.labelColor, object.userData.labelBackground);
+        if (object.userData.texture) object.userData.texture.needsUpdate = true;
+      }));
     }
 
     function buildToolCursor() {
@@ -219,79 +237,195 @@ export function createSceneGeometry(context) {
     }
 
     function buildInjectionMachine() {
-      // 高壓灌注機保留程序化機架、壓力表、軟管與耗材桶，外部泵浦模型補足主要機械細節。
+      // 自製專用低面數 3D 教學模型：參考便攜式單液 PU 裂縫灌注泵的料斗、驅動馬達、泵頭、壓力表與高壓管配置。
+      // 不載入來源不明的下載模型，也不宣稱本模型對應任何品牌或設備額定值。
       const machine = new THREE.Group();
       machine.name = 'expanding-material-injection-machine';
       machine.position.set(3.15, 0, 1.65);
-      addBox(machine, [1.45, .56, .82], [0, .58, 0], mat(0x2c4b5a, { roughness: .46, metalness: .36 }), { name: 'injection-machine-body' });
-      addBox(machine, [1.05, .12, .08], [0, .91, .38], mat(0x75d6df, { roughness: .3, metalness: .2 }), { name: 'machine-control-strip' });
-      const wheelMaterial = mat(0x172733, { roughness: .7, metalness: .3 });
-      [-.48, .48].forEach((x) => {
-        const wheel = new THREE.Mesh(new THREE.TorusGeometry(.16, .055, 8, 16), wheelMaterial);
-        wheel.rotation.y = Math.PI / 2;
-        wheel.position.set(x, .18, .33);
-        wheel.name = 'machine-wheel';
-        machine.add(wheel);
-      });
-      const tank = new THREE.Mesh(new THREE.CylinderGeometry(.34, .39, .78, 18), mat(0x506d7b, { roughness: .35, metalness: .34 }));
-      tank.position.set(-.2, 1.18, 0);
-      tank.name = 'material-tank';
-      machine.add(tank);
-      const tankFill = new THREE.Mesh(new THREE.CylinderGeometry(.255, .285, .48, 18), basic(materialProfiles[state.material].color, { transparent: true, opacity: .66 }));
-      tankFill.position.set(-.2, 1.05, 0);
-      tankFill.name = 'material-tank-fill';
+      const frameMaterial = mat(0x536873, { roughness: .38, metalness: .72 });
+      const darkMetal = mat(0x1b2a31, { roughness: .4, metalness: .52 });
+      const brightMetal = mat(0xb8c9ce, { roughness: .24, metalness: .82 });
+      const safetyYellow = mat(0xeab94f, { roughness: .42, metalness: .18 });
+      const pumpRed = mat(0xc74e40, { roughness: .43, metalness: .2 });
+      const rubber = mat(0x182128, { roughness: .82, metalness: .04 });
+
+      const addRodBetween = (name, start, end, radius, material, sides = 10) => {
+        const from = new THREE.Vector3(...start);
+        const to = new THREE.Vector3(...end);
+        const direction = to.clone().sub(from);
+        const rod = new THREE.Mesh(new THREE.CylinderGeometry(radius * .92, radius, direction.length(), sides), material);
+        rod.position.copy(from.add(to).multiplyScalar(.5));
+        rod.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), direction.normalize());
+        rod.name = name;
+        rod.castShadow = true;
+        rod.receiveShadow = true;
+        machine.add(rod);
+        return rod;
+      };
+
+      // 四支金屬支腳與托盤，讓機器讀起來是可搬運的工地設備，不是浮在地上的箱子。
+      addBox(machine, [1.08, .12, .64], [0, .6, 0], frameMaterial, { name: 'pump-platform' });
+      [-.47, .47].forEach((x) => [-.25, .25].forEach((z) => {
+        addBox(machine, [.17, .07, .15], [x, .045, z], rubber, { name: 'machine-foot' });
+        addRodBetween('machine-frame-leg', [x * 1.04, .08, z * 1.03], [x * .87, .59, z * .86], .035, frameMaterial);
+      }));
+      [-.25, .25].forEach((z) => addRodBetween('machine-frame-rail', [-.48, .35, z], [.48, .35, z], .025, frameMaterial));
+      [-.47, .47].forEach((x) => addRodBetween('machine-frame-crossbar', [x, .4, -.25], [x, .4, .25], .024, frameMaterial));
+      addBox(machine, [.72, .07, .52], [-.03, .69, 0], mat(0x283a43, { roughness: .58, metalness: .42 }), { name: 'pump-drip-tray' });
+
+      // 電動驅動馬達與泵頭分成獨立組件，灌注時只做細微振動回饋。
+      const pumpHead = new THREE.Group();
+      pumpHead.name = 'pump-head';
+      pumpHead.position.set(.04, .82, -.015);
+      machine.add(pumpHead);
+      addBox(pumpHead, [.48, .37, .43], [.16, 0, 0], mat(0x344952, { roughness: .36, metalness: .56 }), { name: 'pressure-pump-housing' });
+      addBox(pumpHead, [.18, .32, .35], [.34, -.03, .02], brightMetal, { name: 'pump-fluid-section' });
+      const piston = new THREE.Mesh(new THREE.CylinderGeometry(.09, .105, .34, 14), brightMetal);
+      piston.position.set(.35, .24, 0);
+      piston.name = 'pump-plunger-cylinder';
+      pumpHead.add(piston);
+      const motor = new THREE.Mesh(new THREE.CylinderGeometry(.18, .18, .48, 18), darkMetal);
+      motor.rotation.z = Math.PI / 2;
+      motor.position.set(-.31, .02, -.01);
+      motor.name = 'electric-drive-motor';
+      pumpHead.add(motor);
+      const motorEnd = new THREE.Mesh(new THREE.CylinderGeometry(.16, .16, .07, 16), pumpRed);
+      motorEnd.rotation.z = Math.PI / 2;
+      motorEnd.position.set(-.57, .02, -.01);
+      motorEnd.name = 'motor-end-cap';
+      pumpHead.add(motorEnd);
+      for (let i = 0; i < 5; i++) {
+        const rib = new THREE.Mesh(new THREE.TorusGeometry(.166, .012, 6, 16), frameMaterial);
+        rib.rotation.y = Math.PI / 2;
+        rib.position.set(-.48 + i * .075, .02, -.01);
+        rib.name = `motor-cooling-rib-${i + 1}`;
+        pumpHead.add(rib);
+      }
+      addBox(pumpHead, [.16, .2, .16], [-.3, -.2, .14], rubber, { name: 'motor-mount' });
+      addBox(pumpHead, [.1, .045, .08], [-.27, -.08, .22], pumpRed, { name: 'motor-switch' });
+      addBox(pumpHead, [.42, .12, .09], [.1, -.2, .25], darkMetal, { name: 'pump-front-control-panel' });
+
+      // 半透明料斗、密封蓋與底部進料頸，材料液位由模擬注料量更新。
+      const hopperCenterY = 1.34;
+      const hopper = new THREE.Mesh(new THREE.CylinderGeometry(.3, .235, .54, 20, 1, false), mat(0xd7e0d9, { roughness: .26, metalness: .08, transparent: true, opacity: .46, side: THREE.DoubleSide }));
+      hopper.position.set(.1, hopperCenterY, -.015);
+      hopper.name = 'material-hopper';
+      machine.add(hopper);
+      const hopperBase = new THREE.Mesh(new THREE.TorusGeometry(.235, .022, 7, 20), brightMetal);
+      hopperBase.position.set(.1, 1.07, -.015);
+      hopperBase.rotation.x = Math.PI / 2;
+      hopperBase.name = 'hopper-base-ring';
+      machine.add(hopperBase);
+      const fillHeight = .43;
+      const tankFill = new THREE.Mesh(new THREE.CylinderGeometry(.225, .19, 1, 18), basic(materialProfiles[state.material].color, { transparent: true, opacity: .76, depthWrite: false }));
+      tankFill.scale.set(1, fillHeight, 1);
+      tankFill.position.set(.1, 1.105 + fillHeight / 2, -.015);
+      tankFill.name = 'material-hopper-fill';
       machine.add(tankFill);
-      const tankCap = new THREE.Mesh(new THREE.CylinderGeometry(.22, .22, .08, 16), mat(0x182c38, { roughness: .3, metalness: .55 }));
-      tankCap.position.set(-.2, 1.61, 0);
-      tankCap.name = 'material-tank-cap';
+      const tankCap = new THREE.Mesh(new THREE.CylinderGeometry(.315, .315, .07, 20), safetyYellow);
+      tankCap.position.set(.1, 1.65, -.015);
+      tankCap.name = 'hopper-safety-lid';
       machine.add(tankCap);
-      const gauge = new THREE.Mesh(new THREE.TorusGeometry(.16, .025, 8, 20), basic(0xf7c76a));
-      gauge.position.set(.28, .73, .44);
-      gauge.rotation.x = Math.PI / 2;
+      const capGrip = new THREE.Mesh(new THREE.CylinderGeometry(.07, .07, .08, 12), darkMetal);
+      capGrip.position.set(.1, 1.725, -.015);
+      capGrip.name = 'hopper-lid-grip';
+      machine.add(capGrip);
+      const feedNeck = new THREE.Mesh(new THREE.CylinderGeometry(.105, .14, .16, 14), brightMetal);
+      feedNeck.position.set(.1, 1.0, -.015);
+      feedNeck.name = 'hopper-feed-neck';
+      machine.add(feedNeck);
+
+      // 正面類比壓力表與調壓閥；指針仍讀取既有 SimulationState 壓力。
+      const gaugeCenter = new THREE.Vector3(-.04, .94, .285);
+      const gaugeBody = new THREE.Mesh(new THREE.CylinderGeometry(.151, .151, .055, 24), darkMetal);
+      gaugeBody.rotation.x = Math.PI / 2;
+      gaugeBody.position.copy(gaugeCenter).add(new THREE.Vector3(0, 0, -.025));
+      gaugeBody.name = 'pressure-gauge-body';
+      machine.add(gaugeBody);
+      const gauge = new THREE.Mesh(new THREE.TorusGeometry(.137, .018, 8, 24), brightMetal);
+      gauge.position.copy(gaugeCenter);
       gauge.name = 'pressure-gauge';
       machine.add(gauge);
-      const gaugeNeedle = new THREE.Mesh(new THREE.BoxGeometry(.018, .13, .018), basic(0xff778b));
-      gaugeNeedle.position.set(.28, .73, .47);
-      gaugeNeedle.rotation.z = -.45;
+      const gaugeFace = new THREE.Mesh(new THREE.CircleGeometry(.119, 24), basic(0xe5ece7));
+      gaugeFace.position.copy(gaugeCenter).add(new THREE.Vector3(0, 0, .008));
+      gaugeFace.name = 'pressure-gauge-face';
+      machine.add(gaugeFace);
+      for (let tick = 0; tick <= 8; tick++) {
+        const angle = Math.PI * (.16 + tick * .085);
+        const mark = new THREE.Mesh(new THREE.BoxGeometry(.012, tick % 2 ? .028 : .04, .007), basic(0x26333a));
+        mark.position.set(gaugeCenter.x + Math.cos(angle) * .092, gaugeCenter.y + Math.sin(angle) * .092, gaugeCenter.z + .014);
+        mark.rotation.z = angle - Math.PI / 2;
+        mark.name = `pressure-gauge-tick-${tick}`;
+        machine.add(mark);
+      }
+      const gaugeNeedle = new THREE.Group();
       gaugeNeedle.name = 'pressure-gauge-needle';
+      gaugeNeedle.position.set(gaugeCenter.x, gaugeCenter.y, gaugeCenter.z + .024);
+      const needleHand = new THREE.Mesh(new THREE.BoxGeometry(.012, .09, .01), basic(0xc4373d));
+      needleHand.position.y = .04;
+      needleHand.name = 'pressure-gauge-needle-hand';
+      gaugeNeedle.add(needleHand);
       machine.add(gaugeNeedle);
-      addBox(machine, [.16, .28, .18], [.52, .82, .19], mat(0x1c303c, { roughness: .34, metalness: .45 }), { name: 'pump-head' });
-      const statusLight = new THREE.Mesh(new THREE.SphereGeometry(.055, 10, 8), basic(0x5fe0a1));
-      statusLight.position.set(.44, .91, .4);
+      const gaugeHub = new THREE.Mesh(new THREE.SphereGeometry(.024, 10, 8), brightMetal);
+      gaugeHub.position.set(gaugeCenter.x, gaugeCenter.y, gaugeCenter.z + .028);
+      gaugeHub.name = 'pressure-gauge-hub';
+      machine.add(gaugeHub);
+      const valveBody = new THREE.Mesh(new THREE.CylinderGeometry(.045, .045, .14, 10), safetyYellow);
+      valveBody.position.set(.39, .82, .2);
+      valveBody.name = 'pressure-adjustment-valve';
+      machine.add(valveBody);
+      const valveHandle = addBox(machine, [.2, .035, .04], [.39, .91, .2], pumpRed, { name: 'pressure-valve-handle' });
+      valveHandle.rotation.z = -.25;
+      const statusLight = new THREE.Mesh(new THREE.SphereGeometry(.04, 10, 8), basic(0x5fe0a1));
+      statusLight.position.set(.42, .77, .28);
       statusLight.name = 'machine-status-light';
       machine.add(statusLight);
-      const nozzle = new THREE.Mesh(new THREE.CylinderGeometry(.045, .07, .28, 10), mat(0xb9d6df, { roughness: .22, metalness: .72 }));
+
+      const nozzle = new THREE.Mesh(new THREE.CylinderGeometry(.035, .05, .16, 12), brightMetal);
       nozzle.rotation.x = Math.PI / 2;
-      nozzle.position.set(.65, .82, .42);
+      nozzle.position.set(.45, .72, .28);
       nozzle.name = 'machine-nozzle';
       machine.add(nozzle);
-      const hoseGeometry = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(.65, .82, .42), new THREE.Vector3(.86, .32, .52), new THREE.Vector3(.72, .24, .45)]);
-      const hose = new THREE.Line(hoseGeometry, new THREE.LineBasicMaterial({ color: 0x182b36, transparent: true, opacity: .95 }));
+      const nozzleCollar = new THREE.Mesh(new THREE.CylinderGeometry(.061, .061, .045, 12), safetyYellow);
+      nozzleCollar.rotation.x = Math.PI / 2;
+      nozzleCollar.position.copy(nozzle.position).add(new THREE.Vector3(0, 0, .075));
+      nozzleCollar.name = 'high-pressure-outlet-collar';
+      machine.add(nozzleCollar);
+      const hoseMaterial = mat(0x12679a, { roughness: .34, metalness: .16 });
+      const initialCurve = new THREE.CatmullRomCurve3([
+        nozzle.position.clone(),
+        new THREE.Vector3(.72, .28, .43),
+        new THREE.Vector3(.34, .09, -.22),
+        new THREE.Vector3(.12, .12, -.66),
+      ]);
+      const hose = new THREE.Mesh(new THREE.TubeGeometry(initialCurve, 36, .024, 8, false), hoseMaterial);
       hose.name = 'injection-hose';
+      hose.castShadow = true;
+      hose.receiveShadow = true;
       machine.add(hose);
+      const hoseTerminal = new THREE.Mesh(new THREE.CylinderGeometry(.033, .043, .16, 10), brightMetal);
+      hoseTerminal.name = 'hose-injection-coupler';
+      machine.add(hoseTerminal);
       const label = makeTextSprite('高壓灌注機', '#dffaff', 'rgba(6,28,40,.92)');
-      label.scale.set(2.05, .51, 1);
-      label.position.set(0, 1.95, .05);
+      label.scale.set(1.8, .45, 1);
+      label.position.set(0, 2.02, .05);
       machine.add(label);
       const externalModelAnchor = new THREE.Group();
       externalModelAnchor.name = 'external-material-bottle-anchor';
       externalModelAnchor.position.set(.62, .72, -.08);
       externalModelAnchor.visible = false;
       machine.add(externalModelAnchor);
-      const externalPumpAnchor = new THREE.Group();
-      externalPumpAnchor.name = 'external-injection-pump-anchor';
-      externalPumpAnchor.position.set(-.18, 0, .46);
-      externalPumpAnchor.visible = false;
-      machine.add(externalPumpAnchor);
       machine.userData.tankFill = tankFill;
+      machine.userData.tankFillBaseY = 1.105;
+      machine.userData.tankFillMaxHeight = fillHeight;
       machine.userData.statusLight = statusLight;
       machine.userData.gaugeNeedle = gaugeNeedle;
-      machine.userData.pumpHead = machine.getObjectByName('pump-head');
+      machine.userData.pumpHead = pumpHead;
       machine.userData.nozzle = nozzle;
       machine.userData.hose = hose;
+      machine.userData.hoseTerminal = hoseTerminal;
       machine.userData.label = label;
       machine.userData.externalModelAnchor = externalModelAnchor;
-      machine.userData.externalPumpAnchor = externalPumpAnchor;
       injectionMachineGroup.add(machine);
       injectionMachineGroup.userData.machine = machine;
       injectionMachineGroup.visible = false;
@@ -483,5 +617,5 @@ export function createSceneGeometry(context) {
       });
     }
 
-  return { createFallbackSurfaceMaps, addBox, addLine, makeTextSprite, buildFloorAndRoom, buildWall, buildWindow, buildRainField, buildPipe, buildRooftopBalcony, buildLabels, buildToolCursor, buildInjectionMachine };
+  return { createFallbackSurfaceMaps, addBox, addLine, makeTextSprite, refreshTextSprites, buildFloorAndRoom, buildWall, buildWindow, buildRainField, buildPipe, buildRooftopBalcony, buildLabels, buildToolCursor, buildInjectionMachine };
 }

@@ -1,5 +1,6 @@
 import { createExteriorCrack } from './exteriorCrack';
 import { floorWallJunctions } from '../simulation/floorModel';
+import { setGroundwaterLevel } from '../simulation/diagnostics';
 import { buildEdges, cellIndex, createWall, pointIndex } from '../simulation/wallModel';
 import type { Point, ScenarioId, SimulationState } from '../simulation/types';
 
@@ -15,12 +16,13 @@ function resetScenario(id: ExtendedScenarioId): SimulationState {
   state.waterSources = [];
   state.cracks = [];
   state.pipes = [];
-  state.repairs = { ports: [], activePortId: null, pressure: 0, nextId: 1, job: null, waterproofRepaired: false, bypassInstalled: false, drainRepaired: false, surfacePatchCount: 0 };
+  state.repairs = { ports: [], activePortId: null, pressure: 0, nextId: 1, job: null, waterproofRepaired: false, negativeSideSealed: false, bypassInstalled: false, drainRepaired: false, surfacePatchCount: 0 };
   state.environment.rain = 0;
   state.environment.wind = 0;
   state.environment.bathroomUse = 0;
   state.environment.drainUse = id === 'drain' || id === 'multi' ? 1 : 0;
   state.environment.groundwaterPressure = id === 'basement' ? .42 : 0;
+  state.environment.groundwaterLevel = id === 'basement' ? 1.75 : 0;
   return state;
 }
 
@@ -99,6 +101,9 @@ export function createDiagnosticScenario(id: ExtendedScenarioId): SimulationStat
     addDrainPipe(state, 'leaking-drain', 31, 17);
   } else {
     addBasementPressurePath(state);
+    // Keep the initial slider level and derived pressure consistent so restoring
+    // the same level after source repair passes the supply-condition check.
+    setGroundwaterLevel(state, state.environment.groundwaterLevel, false);
   }
   buildEdges(state.wall, state.cracks);
   return state;

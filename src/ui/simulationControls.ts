@@ -3,7 +3,8 @@ import type { SimulationEngine } from '../simulation/SimulationEngine';
 import type { FieldView } from '../renderer/moistureField';
 import { drawSection } from '../renderer/moistureField';
 import { layerNames } from '../simulation/wallModel';
-import { surfaceTemperatureC } from '../tools/thermalCamera';
+import { appendDiagnosticEvidence } from '../simulation/diagnostics';
+import { thermalAssessment } from '../tools/thermalCamera';
 
 export function createSimulationControls(engine: SimulationEngine) {
   const view: FieldView = { debug: false, mode: 'moisture', layer: 3, cutaway: false, surface: 'wall', thermal: false };
@@ -19,6 +20,16 @@ export function createSimulationControls(engine: SimulationEngine) {
     <p class="hint" id="dryingStatus" role="status"></p><p class="hint" id="phaseLimit">本階段：PU 裂縫止水。TODO：敲診、裂縫計與診斷評分。</p>
     <button type="button" class="btn" id="thermalCameraToggle" aria-pressed="false">🌡 開啟紅外線熱像</button>
     <p class="hint" id="thermalCameraReadout" role="status">熱像儀關閉</p>
+    <details class="thermal-settings" id="thermalConditions" hidden><summary>熱像判讀條件（教學參數）</summary>
+      <div class="field"><label for="thermalIndoor">室內溫度 <output id="thermalIndoorValue">22°C</output></label><input id="thermalIndoor" type="range" min="10" max="35" value="22"></div>
+      <div class="field"><label for="thermalOutdoor">室外溫度 <output id="thermalOutdoorValue">16°C</output></label><input id="thermalOutdoor" type="range" min="0" max="35" value="16"></div>
+      <div class="field"><label for="thermalHumidity">相對濕度 <output id="thermalHumidityValue">60%</output></label><input id="thermalHumidity" type="range" min="20" max="95" value="60"></div>
+      <div class="field"><label for="thermalSolar">表面日照強度 <output id="thermalSolarValue">0%</output></label><input id="thermalSolar" type="range" min="0" max="100" value="0"></div>
+      <div class="field"><label for="thermalSunMinutes">掃描前受日照時間 <output id="thermalSunMinutesValue">0 分</output></label><input id="thermalSunMinutes" type="range" min="0" max="60" value="0"></div>
+      <div class="field"><label for="thermalEmissivity">表面放射率 <output id="thermalEmissivityValue">0.95</output></label><input id="thermalEmissivity" type="range" min="30" max="100" value="95"></div>
+      <div class="field"><label for="thermalReflected">反射環境溫度 <output id="thermalReflectedValue">22°C</output></label><input id="thermalReflected" type="range" min="0" max="40" value="22"></div>
+      <p class="hint">熱像只呈現表面溫度異常的教學估算；溫差、日照、反射與濕度都可能混淆判讀，請搭配其他證據。</p>
+    </details>
     <label class="debug-toggle"><input type="checkbox" id="debugToggle"> DEBUG · 顯示內部診斷資料</label>
     <div id="debugControls" hidden>
       <label class="field-label" for="fieldMode">診斷圖層</label><select id="fieldMode">
@@ -32,6 +43,29 @@ export function createSimulationControls(engine: SimulationEngine) {
   get<HTMLInputElement>('debugToggle').addEventListener('change', e => { view.debug = (e.target as HTMLInputElement).checked; });
   get<HTMLSelectElement>('fieldMode').addEventListener('change', e => { view.mode = (e.target as HTMLSelectElement).value; });
   get<HTMLButtonElement>('thermalCameraToggle').addEventListener('click', () => { view.thermal = !view.thermal; });
+  const thermalInputIds = ['thermalIndoor', 'thermalOutdoor', 'thermalHumidity', 'thermalSolar', 'thermalSunMinutes', 'thermalEmissivity', 'thermalReflected'];
+  const applyThermalSettings = (record: boolean): void => {
+    const env = engine.state.environment;
+    const indoor = Number(get<HTMLInputElement>('thermalIndoor').value);
+    const outdoor = Number(get<HTMLInputElement>('thermalOutdoor').value);
+    const humidity = Number(get<HTMLInputElement>('thermalHumidity').value);
+    const solar = Number(get<HTMLInputElement>('thermalSolar').value) / 100;
+    const sunMinutes = Number(get<HTMLInputElement>('thermalSunMinutes').value);
+    const emissivity = Number(get<HTMLInputElement>('thermalEmissivity').value) / 100;
+    const reflected = Number(get<HTMLInputElement>('thermalReflected').value);
+    env.indoorTemperatureC = indoor; env.ambientTemperatureC = indoor; env.outdoorTemperatureC = outdoor;
+    env.relativeHumidityPct = humidity; env.solarExposure = solar; env.solarExposureMinutes = sunMinutes;
+    env.surfaceEmissivity = emissivity; env.reflectedTemperatureC = reflected;
+    get('thermalIndoorValue').textContent = `${indoor}°C`; get('thermalOutdoorValue').textContent = `${outdoor}°C`;
+    get('thermalHumidityValue').textContent = `${humidity}%`; get('thermalSolarValue').textContent = `${Math.round(solar * 100)}%`;
+    get('thermalSunMinutesValue').textContent = `${sunMinutes} 分`; get('thermalEmissivityValue').textContent = emissivity.toFixed(2);
+    get('thermalReflectedValue').textContent = `${reflected}°C`;
+    if (record) appendDiagnosticEvidence(engine.state, 'thermal', '熱像條件調整', `室內／室外 ${indoor}°C / ${outdoor}°C；相對濕度 ${humidity}%；日照 ${Math.round(solar * 100)}% × ${sunMinutes} 分；放射率 ${emissivity.toFixed(2)}。`);
+  };
+  for (const id of thermalInputIds) {
+    get<HTMLInputElement>(id).addEventListener('input', () => applyThermalSettings(false));
+    get<HTMLInputElement>(id).addEventListener('change', () => applyThermalSettings(true));
+  }
   get<HTMLSelectElement>('layerSelect').addEventListener('change', e => { view.layer = Number((e.target as HTMLSelectElement).value); });
   const notice = document.createElement('div'); notice.id = 'fieldLegend'; notice.className = 'field-legend';
   document.getElementById('viewport')!.append(notice);
@@ -55,7 +89,7 @@ export function createSimulationControls(engine: SimulationEngine) {
       get<HTMLSelectElement>('fieldMode').querySelector<HTMLOptionElement>('[value=pu]')!.disabled = bath || floor;
       get<HTMLSelectElement>('fieldMode').querySelector<HTMLOptionElement>('[value=cracks]')!.textContent = bath ? '裂縫／防水缺損（選防水層）' : 'Crack Network';
       if (floor && view.mode === 'pu') { view.mode = 'moisture'; get<HTMLSelectElement>('fieldMode').value = 'moisture'; }
-      get('phaseLimit').textContent = '已實作：來源分離、網格量測、熱像估算、PU／Epoxy／凝膠材料模型與局部塗刷。TODO：敲診、裂縫計與 Diagnosis Score。';
+      get('phaseLimit').textContent = '已實作：來源分離、證據時間軸、多來源診斷信心、熱像判讀條件、PU／Epoxy／凝膠材料模型與局部塗刷。敲診與裂縫計仍待實作。';
       panel.querySelector('.hint')!.textContent = bath ? '從乾燥狀態開始，使用 20× 觀察 1–3 分鐘模擬時間。數字為相對含水指標。' : '從乾牆開始。以 20× 觀察約 1–3 分鐘模擬時間，再量測室內濕區。比例為教學指標。';
       get('simClock').textContent = `${Math.floor(s.simulationTime / 60).toString().padStart(2, '0')}:${Math.floor(s.simulationTime % 60).toString().padStart(2, '0')}`;
       get('pressureReading').textContent = s.repairs.pressure.toFixed(2);
@@ -75,9 +109,19 @@ export function createSimulationControls(engine: SimulationEngine) {
       const defaultDepth = floor ? s.floor.height / 2 : 1.625;
       get<HTMLButtonElement>('thermalCameraToggle').textContent = view.thermal ? '🌡 關閉紅外線熱像' : '🌡 開啟紅外線熱像';
       get<HTMLButtonElement>('thermalCameraToggle').setAttribute('aria-pressed', String(view.thermal));
+      get<HTMLDetailsElement>('thermalConditions').hidden = !view.thermal;
+      const env = s.environment;
+      get<HTMLInputElement>('thermalIndoor').value = String(env.indoorTemperatureC);
+      get<HTMLInputElement>('thermalOutdoor').value = String(env.outdoorTemperatureC);
+      get<HTMLInputElement>('thermalHumidity').value = String(env.relativeHumidityPct);
+      get<HTMLInputElement>('thermalSolar').value = String(Math.round(env.solarExposure * 100));
+      get<HTMLInputElement>('thermalSunMinutes').value = String(env.solarExposureMinutes);
+      get<HTMLInputElement>('thermalEmissivity').value = String(Math.round(env.surfaceEmissivity * 100));
+      get<HTMLInputElement>('thermalReflected').value = String(env.reflectedTemperatureC);
+      applyThermalSettings(false);
       const probe = s.tools.probeDomain === view.surface && s.tools.probe ? s.tools.probe : { x: 0, y: defaultDepth };
-      const thermalValue = view.thermal ? surfaceTemperatureC(s, probe, view.surface) : null;
-      get('thermalCameraReadout').textContent = thermalValue === null ? '熱像儀關閉' : `探頭估算 ${thermalValue.toFixed(1)}°C · 環境 ${s.environment.ambientTemperatureC.toFixed(1)}°C · 含水與管線推導，非實測值`;
+      const thermal = view.thermal ? thermalAssessment(s, probe, view.surface) : null;
+      get('thermalCameraReadout').textContent = thermal === null ? '熱像儀關閉' : `表面估算 ${thermal.apparentTemperatureC.toFixed(1)}°C · 露點 ${thermal.dewPointC.toFixed(1)}°C · 判讀信心 ${thermal.confidence}% · ${thermal.warnings.join('；') || '目前條件下可比較溫度異常'} · 非實測值`;
       get('sectionCaption').textContent = `${floor ? '地板三層 · 距牆深度' : view.surface === 'slab' ? '樓板六層 · 深度座標' : '牆體六層 · 高度'} ${(s.tools.probeDomain === view.surface ? s.tools.probe?.y ?? defaultDepth : defaultDepth).toFixed(2)} · 藍色為水分`;
       const legends: Record<string, string> = { moisture: '藍 8% → 黃紅 100%', flow: '箭頭顯示當前水分通量', cracks: '金色顯示裂縫網格', pu: '綠色 PU · 金色 Epoxy · 紫色凝膠', source: '粉紅顯示此觀察域的供水範圍／入口' };
       const layerLabel = names[view.layer];

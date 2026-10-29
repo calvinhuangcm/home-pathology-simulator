@@ -1,7 +1,7 @@
 import { FLOOR_SURFACE, floorLayerNames } from '../simulation/floorModel';
 import type { Domain, SimulationState } from '../simulation/types';
 import { cellIndex, clamp, gridPoint, layerNames } from '../simulation/wallModel';
-import { surfaceTemperatureC, thermalColor } from '../tools/thermalCamera';
+import { thermalAssessment, thermalColor } from '../tools/thermalCamera';
 
 export interface FieldView { debug: boolean; mode: string; layer: number; cutaway: boolean; surface: Domain; thermal: boolean }
 /** Canvas is only a projection of SimulationState, never a source for meter values. */
@@ -43,11 +43,37 @@ export function createMoistureField(world: import('three').Group, domain: Domain
           context.fillRect(cx, cy, size, size);
         }
         if (wet > .015) {
-          const stain = context.createRadialGradient(cx + 6, cy + 6, 0, cx + 6, cy + 6, 15);
-          stain.addColorStop(0, `rgba(25,74,89,${wet * .56})`);
-          stain.addColorStop(1, 'rgba(25,74,89,0)');
-          context.fillStyle = stain;
-          context.fillRect(cx - 9, cy - 9, 30, 30);
+          if (domain === 'floor') {
+            // Floor sheen is a projection of floor-cell moisture, so dry cells never show a decorative puddle.
+            const radiusX = 12 + wet * 9, radiusY = 6 + wet * 5;
+            context.save(); context.translate(cx + 6, cy + 6); context.scale(1, radiusY / radiusX);
+            const pool = context.createRadialGradient(0, 0, 1, 0, 0, radiusX);
+            pool.addColorStop(0, `rgba(39,106,126,${wet * .34})`);
+            pool.addColorStop(.72, `rgba(39,106,126,${wet * .14})`);
+            pool.addColorStop(1, 'rgba(39,106,126,0)');
+            context.fillStyle = pool; context.beginPath(); context.arc(0, 0, radiusX, 0, Math.PI * 2); context.fill();
+            if (wet > .3) {
+              context.strokeStyle = `rgba(225,246,245,${wet * .12})`; context.lineWidth = .8;
+              context.beginPath(); context.ellipse(0, 0, radiusX * .52, radiusX * .2, -.12, .15, Math.PI * .9); context.stroke();
+            }
+            context.restore();
+          } else {
+            const stain = context.createRadialGradient(cx + 6, cy + 6, 0, cx + 6, cy + 6, 15);
+            stain.addColorStop(0, `rgba(25,74,89,${wet * .56})`);
+            stain.addColorStop(1, 'rgba(25,74,89,0)');
+            context.fillStyle = stain;
+            context.fillRect(cx - 9, cy - 9, 30, 30);
+            // Short downward traces echo water runs on plaster while remaining tied to wet cells.
+            if (domain === 'wall' && wet > .16 && (x * 17 + y * 7) % 3 !== 0) {
+              const drift = Math.sin(x * 2.7 + y * 1.9) * 2.4;
+              const length = 5 + wet * 26;
+              context.strokeStyle = `rgba(25,74,89,${wet * .22})`;
+              context.lineWidth = .55 + wet * .65;
+              context.beginPath(); context.moveTo(cx + 3 + drift, cy + 7);
+              context.quadraticCurveTo(cx + 4 + drift, cy + 7 + length * .55, cx + 4.5 + drift * .4, cy + 7 + length);
+              context.stroke();
+            }
+          }
         }
         if (cell.saltLevel > .015) {
           context.fillStyle = `rgba(255,250,222,${clamp(cell.saltLevel * 2)})`;
@@ -61,8 +87,11 @@ export function createMoistureField(world: import('three').Group, domain: Domain
       } else {
         let color = `rgba(20,45,60,.6)`;
         if (mode === 'thermal') {
-          const temperature = surfaceTemperatureC(state, { x: (x + .5) * wall.width / wall.cols - wall.width / 2, y: (y + .5) * wall.height / wall.rows }, domain) ?? state.environment.ambientTemperatureC;
-          color = thermalColor(temperature);
+          const assessment = thermalAssessment(state, { x: (x + .5) * wall.width / wall.cols - wall.width / 2, y: (y + .5) * wall.height / wall.rows }, domain);
+          const temperature = assessment?.apparentTemperatureC ?? state.environment.ambientTemperatureC;
+          const min = state.environment.indoorTemperatureC - 3;
+          const max = state.environment.indoorTemperatureC + 3 + state.environment.solarExposure * 6;
+          color = thermalColor(temperature, min, max);
         }
         if (mode === 'moisture' || mode === 'flow') color = `hsla(${215 - cell.moisture * 1.6},80%,${24 + cell.moisture * .35}%,.85)`;
         if (mode === 'cracks') color = cell.crackLevel > 0 || cell.material === 'waterproof' && cell.waterproofLevel < .5 ? '#f7c76ae8' : '#172a3899';
@@ -102,14 +131,25 @@ export function createMoistureField(world: import('three').Group, domain: Domain
     for (const port of domain === 'wall' ? state.repairs.ports : []) if (port.drillProgress < 1) {
       const px = (port.position.x + 5.25) / 10.5 * canvas.width;
       const py = (6 - port.position.y) / 6 * canvas.height;
+      const aim = {
+        up: { x: 0, y: -1 }, down: { x: 0, y: 1 },
+        left: { x: -1, y: 0 }, right: { x: 1, y: 0 },
+      }[port.drillDirection] || { x: 0, y: 1 };
+      const angle = Math.atan2(aim.y, aim.x);
+      const axisLength = 16 * port.drillProgress;
       context.strokeStyle = '#f7c76a'; context.lineWidth = 2;
-      context.beginPath(); context.arc(px, py, 9, 0, Math.PI * 2 * port.drillProgress); context.stroke();
+      context.save(); context.translate(px, py); context.rotate(angle);
+      context.beginPath(); context.ellipse(0, 0, 9, 6, 0, 0, Math.PI * 2 * port.drillProgress); context.stroke();
+      context.strokeStyle = 'rgba(247,199,106,.62)'; context.lineWidth = 2.5;
+      context.beginPath(); context.moveTo(2, 0); context.lineTo(2 + axisLength, 0); context.stroke();
       context.fillStyle = '#ddd3bd';
       for (let n = 0; n < 10; n++) {
         const phase = (port.drillProgress * 3 + n / 10) % 1;
-        const angle = n * 2.4;
-        context.fillRect(px + Math.cos(angle) * phase * 20, py + Math.sin(angle) * phase * 14 + phase * 10, 2, 2);
+        const spread = (n % 5 - 2) * 2.2;
+        const distance = phase * 15;
+        context.fillRect(-distance - 2, spread, 2, 2);
       }
+      context.restore();
     }
     texture.needsUpdate = true;
   }

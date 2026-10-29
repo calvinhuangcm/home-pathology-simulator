@@ -1,6 +1,6 @@
 # VALIDATION
 
-最新驗證：2026-10-16（Asia/Taipei）。Scenario 02 擴充後，重新執行所有引擎與瀏覽器回歸。
+最新驗證：2026-10-20（Asia/Taipei）。診斷、地下室與熱像擴充後，重新執行完整引擎及瀏覽器回歸。
 
 ## 自動檢查
 
@@ -8,9 +8,9 @@
 | --- | --- |
 | `./scripts/run.sh lint` | 通過，ESLint 無錯誤 |
 | `./scripts/run.sh typecheck` | 通過，新 TypeScript 模組 strict 型別檢查 |
-| `./scripts/run.sh test` | 22 / 22 通過 |
+| `./scripts/run.sh test` | 36 / 36 通過 |
 | `./scripts/run.sh build` | 通過，產生 dist；沿用本機 vendor Three.js |
-| `./scripts/run.sh test:browser` | 通過，真實 Chrome headless UI 操作，依序跑 Scenario 01 與 02A／02B |
+| `./scripts/run.sh test:browser` | 通過，真實 Chrome headless UI 操作，含 Scenario 01、02A／02B、旋轉渲染、室內地板、排水／多重來源／地下室／熱像 |
 
 引擎測試涵蓋：無雨不生水、暫停、空間水分傳播、來源與症狀錯位、儀器 cell 取樣、損傷累積、鑽孔與塞針前置條件、灌注與乾燥、錯誤孔無效、完整快照還原、30/60fps 與 20× 固定 tick 等價、材質通透差異，以及關閉來源時的水分守恆／蒸散與數值邊界。
 
@@ -137,3 +137,11 @@ Chrome UI 測試透過真實射線命中及工具操作，乾區 8%；淋水結�
 另保留並通過 Scenario 01 灌注、Scenario 02A／02B 修繕與旋轉視角的既有瀏覽器回歸。Console／runtime errors 均為 0。新增地板讀值與牆／天花讀值分離，避免局部淋水把乾牆誤報為高濕。
 
 報告：`artifacts/floor-browser-report.json`；截圖：`artifacts/floor-*.png`。完整瀏覽器命令包含地板測試，也可單獨執行 `./scripts/run.sh test:browser:floor`。原始單檔備份 SHA-256 維持 `85cc30124eb7c7253aaac0c43cc96d33398de3b2953df56ca6ed67eadef36313`。
+
+## 2026-10-20：診斷證據、排水分支、地下室與熱像判讀
+
+檢查 `lint`、`typecheck`、production `build` 皆通過；引擎測試 36／36 通過。診斷瀏覽器回歸透過 Chrome UI 驗證排水情境的有限單支測試會記錄來源通量並自動停水；多重漏水中只啟用被選支管、逐一隔離修復，並正確提交兩個來源的 100 分校準診斷。
+
+地下室測試確認水位會推導水壓；室內側封堵完成後，外側地下水源仍保持供水；迎水側防水則需解除水壓施工並在相同水位恢復後驗證。熱像流程確認條件控制會觸發小溫差、日照與低放射率警示，並顯示估算溫度而非實測值。桌機滑鼠與平板觸控塗刷流程通過，瀏覽器 console／runtime errors 為 0。
+
+鑽孔畫面另以 1280×720 截圖檢查；孔底、內壁與狀態環均在牆面內，沒有朝外突出的幾何。瀏覽器回歸加入幾何深度斷言，避免後續修改把孔位改回凸起標記。地下水壓、熱像溫度與評分均為教學模型，不是現場校正值或施工規格。

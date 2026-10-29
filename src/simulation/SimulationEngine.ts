@@ -5,6 +5,7 @@ import { createDiagnosticScenario } from '../scenarios/diagnostic';
 import { updateDamage } from './damageSimulation';
 import { updateRepairs } from './repairSimulation';
 import { updateWater } from './waterSimulation';
+import { appendDiagnosticEvidence, updateDrainBranchTest } from './diagnostics';
 import type { ScenarioId, SimulationState } from './types';
 
 export class SimulationEngine {
@@ -19,6 +20,7 @@ export class SimulationEngine {
     this.state = scenario === 'crack' ? createExteriorCrack()
       : scenario === 'bathroom' || scenario === 'hotpipe' ? createBathroom(scenario)
         : createDiagnosticScenario(scenario);
+    appendDiagnosticEvidence(this.state, 'scenario', '情境開始', `已載入情境 ${scenario}；量測與事件會依模擬時間記錄。`);
     this.delta = new Float64Array(this.state.wall.cells.length); this.slabDelta = new Float64Array(this.state.slab?.cells.length ?? 0); this.floorDelta = new Float64Array(this.state.floor.cells.length);
     this.accumulator = 0;
   }
@@ -34,6 +36,7 @@ export class SimulationEngine {
       updateWater(this.state, this.fixedStep, this.delta, this.slabDelta, this.floorDelta);
       updateDamage(this.state, this.fixedStep);
       this.state.simulationTime += this.fixedStep;
+      updateDrainBranchTest(this.state, this.fixedStep);
       this.accumulator -= this.fixedStep;
     }
     this.updateMetrics();

@@ -1,5 +1,5 @@
 import type { FloorWaterTest, Point, SimulationState, WallModel } from './types';
-import { buildEdges, cellIndex, cellPoint, createCell, gridPoint, pointIndex } from './wallModel';
+import { buildEdges, cellIndex, cellPoint, createCell, gridPoint } from './wallModel';
 
 /** Room-side floor; its depth coordinate is unrelated to wall height or upstairs slab depth. */
 export const FLOOR_SURFACE = Object.freeze({ width: 11, height: 3.85, originZ: .65, top: -.03 });
@@ -30,13 +30,13 @@ export function isFloorPoint(point: Point): boolean {
 export function startFloorWaterTest(s: SimulationState, position: Point): { ok: boolean; message: string; test?: FloorWaterTest } {
   if (!isFloorPoint(position)) return { ok: false, message: '請在室內地磚範圍內點選淋水測試位置。' };
   if (s.floorTests.filter(test => test.remainingSeconds > 0).length >= 4) return { ok: false, message: '已有四處淋水測試進行中，請等待完成。' };
-  const center = pointIndex(s.floor, position);
-  if (s.floorTests.some(test => test.remainingSeconds > 0 && test.cells.includes(center))) return { ok: false, message: '此處正在淋水，請先觀察或選擇其他位置。' };
   const { x, y } = gridPoint(s.floor, position), cells: number[] = [];
   for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
     if (Math.abs(dx) + Math.abs(dy) > 1 || x + dx < 0 || x + dx >= s.floor.cols || y + dy < 0 || y + dy >= s.floor.rows) continue;
     cells.push(cellIndex(s.floor, x + dx, y + dy, 0));
   }
+  const activeCells = new Set(s.floorTests.filter(test => test.remainingSeconds > 0).flatMap(test => test.cells));
+  if (cells.some(index => activeCells.has(index))) return { ok: false, message: '此處的淋水範圍與進行中測試重疊，請先觀察或選擇其他位置。' };
   const test: FloorWaterTest = { id: Math.max(0, ...s.floorTests.map(test => test.id)) + 1, position: { ...position }, cells, remainingSeconds: 5, appliedWater: 0 };
   s.floorTests = [...s.floorTests.slice(-15), test]; s.tools.floorTestArmed = false;
   return { ok: true, message: '開始 5 秒地板定點淋水。水會滲入填縫及砂漿，之後可量測擴散與乾燥。', test };

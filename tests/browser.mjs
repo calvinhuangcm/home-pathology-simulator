@@ -19,6 +19,18 @@ const setRain = async key => { await page.locator('#rainSlider').focus(); await 
 try {
   await page.goto(process.env.BASE_URL || 'http://127.0.0.1:5173/?test=1');
   await page.waitForFunction(() => !!window.__simTest);
+  await page.evaluate(() => {
+    const select = document.querySelector('#materialSelect');
+    window.__materialOptionMutations = 0;
+    window.__materialOptionObserver = new MutationObserver(records => { window.__materialOptionMutations += records.length; });
+    window.__materialOptionObserver.observe(select, { subtree: true, childList: true, characterData: true });
+  });
+  await page.waitForTimeout(700);
+  const materialOptionMutations = await page.evaluate(() => {
+    window.__materialOptionObserver.disconnect();
+    return window.__materialOptionMutations;
+  });
+  assert.equal(materialOptionMutations, 0, 'material dropdown options must not be rewritten during periodic UI refreshes');
   await page.locator('#frontViewBtn').click();
   await setRain('Home');
   await page.selectOption('#timeSlider', '20');
@@ -38,13 +50,40 @@ try {
   report.desktop.readings = { control: await page.locator('#controlMetric').innerText(), suspect: await page.locator('#suspectMetric').innerText() };
   await page.screenshot({ path: 'artifacts/scenario01-wet-1280.png' });
   await page.locator('[data-mode="drill"]').click();
+  assert.equal(await page.locator('#drillAimControl').isVisible(), true);
+  assert.match(await page.locator('#modeHint').innerText(), /游標到牆面/);
+  await page.waitForFunction(() => {
+    const option = document.querySelector('#drillModelSelect option[value="external"]');
+    return !option.disabled || document.querySelector('#assetStatus').textContent.includes('內建程序模型');
+  }, { timeout: 15000 });
+  const externalDrillAvailable = await page.locator('#drillModelSelect option[value="external"]').evaluate(option => !option.disabled);
+  assert.equal(await page.locator('#drillModelSelect').inputValue(), externalDrillAvailable ? 'external' : 'procedural', 'the locally bundled Drill 01 auto-selects when its loader is available, otherwise the procedural fallback stays active');
   const a = await page.evaluate(() => window.__simTest.project(1, 3));
   await page.mouse.move(a.x, a.y); await page.mouse.down(); await page.mouse.move(a.x + 45, a.y, { steps: 8 }); await page.mouse.up();
   assert.equal((await snapshot()).repairs.ports.length, 0, 'drag must not drill');
   await page.locator('#frontViewBtn').click();
+  await page.locator('[data-drill-direction="right"]').click();
+  assert.equal(await page.locator('#drillAimControl').isVisible(), true);
+  assert.equal(await page.locator('[data-drill-direction="right"]').getAttribute('aria-pressed'), 'true');
+  const aimPoint = await page.evaluate(() => window.__simTest.project(-1.125, 3.625));
+  await page.mouse.move(aimPoint.x, aimPoint.y);
+  const rightAxis = await page.evaluate(() => window.__simTest.drillPreviewAxis());
+  assert.ok(rightAxis.x < -.55 && rightAxis.z > .55, 'right aim shows a 45 degree drill body and bit axis');
+  await page.locator('[data-drill-direction="down"]').click();
+  assert.equal(await page.locator('[data-drill-direction="down"]').getAttribute('aria-pressed'), 'true');
+  await page.mouse.move(aimPoint.x, aimPoint.y);
+  const downAxis = await page.evaluate(() => window.__simTest.drillPreviewAxis());
+  assert.ok(downAxis.y > .55 && downAxis.z > .55, 'down aim updates the drill preview axis');
+  const externalBitAxis = await page.evaluate(() => window.__simTest.externalDrillBitAxis());
+  if (externalDrillAvailable) assert.ok(externalBitAxis[2] < -.4, 'Poly Haven drill bit points inward toward the wall after its horizontal 180-degree turn');
   await clickWall(-1.125, 3.625);
   assert.equal((await snapshot()).repairs.ports.length, 1);
   assert.equal((await snapshot()).repairs.ports[0].drillProgress < 1, true);
+  assert.equal((await page.evaluate(() => window.__simTest.toolState())).drillVisible, true, 'the drill cursor stays visible while the new bore is drilling');
+  const holeParts = await page.evaluate(() => window.__simTest.portVisual(1));
+  assert.ok(holeParts.some(part => part.name === 'recessed-hole-bottom' && part.z < 0), 'the drilled marker has a recessed dark bottom');
+  assert.ok(holeParts.find(part => part.name === 'hole-status-ring').frontExtent < 0, 'the status ring stays behind the plaster face');
+  assert.ok(holeParts.every(part => part.frontExtent <= 0), 'the visible hole geometry does not protrude from the wall');
   await page.locator('#playPauseBtn').click();
   const pause = await snapshot();
   await page.waitForTimeout(500);
@@ -55,8 +94,27 @@ try {
   await page.locator('[data-mode="insert"]').click();
   await page.locator('#nextStepBtn').click();
   assert.equal((await snapshot()).repairs.ports[0].inserted, true);
+  const insertedPoint = await page.evaluate(() => window.__simTest.project(-1.125, 3.625));
+  await page.mouse.move(insertedPoint.x, insertedPoint.y);
+  const toolState = await page.evaluate(() => window.__simTest.toolState());
+  assert.equal(toolState.installedNeedleVisible, true);
+  assert.equal(toolState.needleCursorVisible, false, 'the hover needle must hide once the installed packer occupies the port');
   await page.locator('[data-mode="inject"]').click();
   await page.locator('#nextStepBtn').click();
+  const injectionMachine = await page.evaluate(() => window.__simTest.injectionMachineState());
+  assert.equal(injectionMachine.visible, true, 'the dedicated injection pump appears while injecting');
+  for (const component of ['machine-frame-leg', 'material-hopper', 'electric-drive-motor', 'pressure-gauge-face', 'injection-hose', 'hose-injection-coupler']) {
+    assert.ok(injectionMachine.names.includes(component), `the injection pump model includes ${component}`);
+  }
+  assert.ok(injectionMachine.hoseVertices > 100, 'the pump hose is a visible thick 3D tube');
+  assert.equal(injectionMachine.hoseTerminalVisible, true);
+  assert.ok(injectionMachine.hoseTargetGap < .001, 'the high-pressure hose coupler connects to the selected injection port');
+  assert.ok(injectionMachine.hoseMinFloorClearance > .02, `the full hose centerline and its radius stay above the tile surface (clearance=${injectionMachine.hoseMinFloorClearance})`);
+  assert.ok(injectionMachine.hosePortOffset > .04 && injectionMachine.hosePortOffset < .14, 'the hose approaches the port from the visible room side of the wall');
+  await page.setViewportSize({ width: 1920, height: 1080 });
+  await page.waitForTimeout(250);
+  await page.screenshot({ path: 'artifacts/injection-pump-model.png' });
+  await page.setViewportSize({ width: 1280, height: 720 });
   await page.waitForFunction(() => window.__simTest.snapshot().repairs.pressure > .5);
   report.desktop.pumping = (await snapshot()).repairs;
   await page.waitForFunction(() => window.__simTest.snapshot().metrics.volumeMl >= 180, { timeout: 20000 });

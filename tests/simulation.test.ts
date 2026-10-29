@@ -76,6 +76,27 @@ test('wrong hole cannot seal a distant crack, even after prolonged pumping', () 
   assert.ok(e.state.cracks.every(i => e.state.wall.cells[i].pu === 0));
 });
 
+test('45 degree drill aim changes whether the bore reaches the crack network', () => {
+  const down = new SimulationEngine();
+  const downPort = drill(down.state, { x: -1.125, y: 3.625 }, { direction: 'down', angleDeg: 45 })!;
+  assert.equal(downPort.drillDirection, 'down');
+  assert.equal(downPort.drillAngleDeg, 45);
+  assert.equal(downPort.connected, true, 'the downward bore follows the crack in this teaching case');
+
+  const right = new SimulationEngine();
+  const rightPort = drill(right.state, { x: -1.125, y: 3.625 }, { direction: 'right', angleDeg: 45 })!;
+  assert.equal(rightPort.connected, false, 'a lateral bore misses the vertical crack at the same entry point');
+});
+
+test('drilling rejects non-finite positions without creating corrupt ports', () => {
+  const e = new SimulationEngine();
+  const before = e.state.repairs.ports.length;
+  assert.equal(drill(e.state, { x: Number.NaN, y: 3 }), null);
+  assert.equal(drill(e.state, { x: 3, y: Number.POSITIVE_INFINITY }), null);
+  assert.equal(drill(e.state, { x: Number.NEGATIVE_INFINITY, y: 3 }), null);
+  assert.equal(e.state.repairs.ports.length, before);
+});
+
 test('fixed timestep produces identical state for 30fps, 60fps and accelerated time', () => {
   const a = new SimulationEngine(), b = new SimulationEngine(), c = new SimulationEngine();
   for (let i = 0; i < 300; i++) a.update(1 / 30);

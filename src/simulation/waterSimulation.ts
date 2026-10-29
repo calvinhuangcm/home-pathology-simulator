@@ -8,6 +8,7 @@ export function permeability(cell: WallCell): number {
     * (1 - clamp(cell.expansion * 1.9, 0, .985))
     * (1 - clamp(cell.epoxyBond * .92, 0, .92))
     * (1 - clamp(cell.gelSeal * .82, 0, .82))
+    * (1 - clamp(cell.negativeSideSeal * .72, 0, .72))
     * (1 - cell.surfaceCoating * .85);
 }
 const harmonic = (a: number, b: number): number => 2 * a * b / Math.max(.00001, a + b);
@@ -84,7 +85,9 @@ export function updateWater(state: SimulationState, dt: number, delta: Float64Ar
       grid.cells[source.cell].moisture = Math.min(100, grid.cells[source.cell].moisture + source.flow * 160 * dt);
     } else if (source.kind === 'drain') {
       const pipe = state.pipes.find(p => p.id === source.pipeId);
-      source.unsealedFlow = source.enabled && state.environment.drainUse > 0 ? state.environment.drainUse : 0;
+      const branchTest = state.diagnostics.activeDrainTest;
+      const branchSelected = !branchTest || branchTest.pipeId === source.pipeId;
+      source.unsealedFlow = source.enabled && branchSelected && state.environment.drainUse > 0 ? state.environment.drainUse : 0;
       source.flow = pipe?.leaking && !pipe.isolated ? source.unsealedFlow * (pipe.service === 'drain' ? 1 : 0) : 0;
       grid.cells[source.cell].moisture = Math.min(100, grid.cells[source.cell].moisture + source.flow * 125 * dt);
     } else if (source.kind === 'groundwater') {

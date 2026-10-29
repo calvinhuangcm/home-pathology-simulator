@@ -31,8 +31,19 @@ export function createExteriorCrack(): SimulationState {
     scenarioId: 'crack', slab: null, junctions: [],
     wall, cracks, waterproofLayers: [4], pipes: [],
     waterSources: [{ cell: pointIndex(wall, exteriorSource, 5), position: exteriorSource, enabled: true, flow: 0, unsealedFlow: 0, kind: 'rain', domain: 'wall', footprint: [], defects: [] }],
-    repairs: { ports: [], activePortId: null, pressure: 0, nextId: 1, job: null, waterproofRepaired: false, bypassInstalled: false, drainRepaired: false, surfacePatchCount: 0 },
-    tools: { probe: null, probeDomain: 'wall', mode: 'pinless', floorTestArmed: false }, environment: { rain: .72, wind: .38, bathroomUse: 1, pipeValveOpen: true, pipePressure: .4, drainUse: 0, groundwaterPressure: .35, ambientTemperatureC: 22 },
+    repairs: { ports: [], activePortId: null, pressure: 0, nextId: 1, job: null, waterproofRepaired: false, negativeSideSealed: false, bypassInstalled: false, drainRepaired: false, surfacePatchCount: 0 },
+    diagnostics: {
+      hypotheses: {
+        'external-crack': { selected: false, confidence: 50 },
+        'bathroom-waterproof': { selected: false, confidence: 50 },
+        'hot-water-pipe': { selected: false, confidence: 50 },
+        'drain-pipe': { selected: false, confidence: 50 },
+        'groundwater-pressure': { selected: false, confidence: 50 },
+        condensation: { selected: false, confidence: 50 },
+      },
+      evidence: [], nextEvidenceId: 1, result: null, activeDrainTest: null, lastDrainTest: null,
+    },
+    tools: { probe: null, probeDomain: 'wall', mode: 'pinless', floorTestArmed: false }, environment: { rain: .72, wind: .38, bathroomUse: 1, pipeValveOpen: true, pipePressure: .4, drainUse: 0, groundwaterPressure: .35, groundwaterLevel: 0, ambientTemperatureC: 22, indoorTemperatureC: 22, outdoorTemperatureC: 16, relativeHumidityPct: 60, solarExposure: 0, solarExposureMinutes: 0, surfaceEmissivity: .95, reflectedTemperatureC: 22 },
     simulationTime: 0, running: true, timeScale: 1,
     metrics: { meanMoisture: 8, surfaceMax: 8, wallSurfaceMax: 8, ceilingSurfaceMax: 8, floorSurfaceMax: 8, floorMeanMoisture: 8, floorInflow: 0, internalMax: 8, efflorescence: 0, mold: 0, damage: 0, leakRate: 0, reduction: 0, expansion: 1, volumeMl: 0 },
   };

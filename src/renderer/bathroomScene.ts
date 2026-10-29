@@ -16,6 +16,10 @@ export function createBathroomScene(architecture: import('three').Group) {
   }
   const soil = new THREE.Mesh(new THREE.BoxGeometry(10.6, 6.1, .52), new THREE.MeshStandardMaterial({ color: 0x59483b, roughness: 1, transparent: true, opacity: .55, depthWrite: false }));
   soil.position.set(0, 3, -1.05); soil.name = 'basement-soil-mass'; basement.add(soil);
+  const waterBody = new THREE.Mesh(new THREE.PlaneGeometry(10.25, 6), new THREE.MeshBasicMaterial({ color: 0x1e8da8, transparent: true, opacity: .22, depthWrite: false, side: THREE.DoubleSide }));
+  waterBody.name = 'groundwater-body'; waterBody.renderOrder = 1; basement.add(waterBody);
+  const waterLine = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(-5.12, 0, -.69), new THREE.Vector3(5.12, 0, -.69)]), new THREE.LineBasicMaterial({ color: 0x6ce6f5, transparent: true, opacity: .9 }));
+  waterLine.name = 'groundwater-level-line'; waterLine.renderOrder = 2; basement.add(waterLine);
   for (let n = 0; n < 8; n++) {
     const y = .45 + n * .72;
     const stratum = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(-5.1, y, -.77), new THREE.Vector3(5.1, y, -.77)]), new THREE.LineBasicMaterial({ color: n % 2 ? 0x8d7963 : 0x6d5a49, transparent: true, opacity: .55 }));
@@ -31,6 +35,9 @@ export function createBathroomScene(architecture: import('three').Group) {
       slab.visible = active && (s.scenarioId === 'bathroom' || s.scenarioId === 'multi') && surface === 'slab';
       pipes.visible = active && ['hotpipe', 'drain', 'multi'].includes(s.scenarioId);
       basement.visible = active && s.scenarioId === 'basement' && reveal;
+      waterBody.scale.y = s.environment.groundwaterLevel / 6;
+      waterBody.position.set(0, s.environment.groundwaterLevel / 2, -.69);
+      waterLine.position.y = s.environment.groundwaterLevel;
       const next = s.pipes.map(p => `${p.id}:${p.isolated}:${p.exposed}:${p.service}`).join('|');
       const rebuilt = next !== signature;
       if (rebuilt) {

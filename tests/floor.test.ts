@@ -61,6 +61,7 @@ test('finite floor water test lasts five simulation seconds, rejects overlapping
   const p = floorPoint(e.state), result = startFloorWaterTest(e.state, p);
   assert.ok(result.ok); assert.equal(result.test!.remainingSeconds, 5);
   assert.equal(startFloorWaterTest(e.state, p).ok, false);
+  assert.equal(startFloorWaterTest(e.state, floorPoint(e.state, 33, 13)).ok, false, 'partially overlapping test footprints are rejected');
   e.update(1);
   assert.ok(Math.abs(e.state.floorTests[0].remainingSeconds - 4) < 1e-9);
   assert.ok(Math.abs(e.state.floorTests[0].appliedWater - 60) < 1e-8);
