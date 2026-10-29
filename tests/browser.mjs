@@ -37,7 +37,8 @@ try {
   await page.waitForTimeout(700);
   let s = await snapshot();
   assert.equal(s.metrics.leakRate, 0);
-  assert.ok(s.metrics.surfaceMax < 10);
+  assert.ok(s.wall.cells.every(cell => cell.moisture >= 8 && cell.moisture <= 100), 'stored moisture stays bounded after rain stops');
+  assert.ok(s.wall.cells.some(cell => cell.moisture > 8), 'stopping rain does not erase moisture already stored inside the wall');
   report.desktop.dry = s.metrics;
   await setRain('End');
   await page.waitForFunction(() => window.__simTest.snapshot().metrics.surfaceMax > 54, { timeout: 30000 });

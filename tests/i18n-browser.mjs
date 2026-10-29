@@ -28,6 +28,13 @@ try {
   await page.waitForFunction(() => document.querySelector('#sceneTitle').textContent === 'Bathroom waterproofing failure');
   assert.match(await page.locator('#bathroomPanel').innerText(), /Bathroom · Water supply and source repair/i);
   assert.equal(await page.locator('#bathroomPanel').isVisible(), true);
+  await page.locator('#debugToggle').check();
+  await page.locator('[data-mode="inspect"]').click();
+  const profileProbe = await page.evaluate(() => window.__simTest.project(-.25, 2.4));
+  await page.mouse.move(profileProbe.x, profileProbe.y);
+  await page.waitForFunction(() => document.querySelectorAll('#depthProfileRows [data-layer]').length === 6);
+  assert.equal(await page.locator('.depth-profile-heading strong').innerText(), 'Moisture index by layer at probe');
+  await page.locator('#debugToggle').uncheck();
   const collectUntranslatedEnglish = () => page.evaluate(() => {
     const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
     const leftovers = [];
@@ -55,6 +62,13 @@ try {
   assert.equal(await page.locator('#sceneTitle').innerText(), '浴室防水層の劣化');
   assert.match(await page.locator('#bathroomPanel').innerText(), /給水と水源の補修/);
   assert.equal(await page.locator('#scene').getAttribute('aria-label'), '漏水のインタラクティブシーンです。クリックで選択中のツールを実行し、ドラッグで回転、ピンチで拡大縮小します。右側の孔リストからプラグ取付と注入も操作できます。');
+  await page.locator('#debugToggle').check();
+  await page.locator('[data-mode="inspect"]').click();
+  const japaneseProfileProbe = await page.evaluate(() => window.__simTest.project(-.25, 2.4));
+  await page.mouse.move(japaneseProfileProbe.x, japaneseProfileProbe.y);
+  await page.waitForFunction(() => document.querySelectorAll('#depthProfileRows [data-layer]').length === 6);
+  assert.equal(await page.locator('.depth-profile-heading strong').innerText(), '探頭位置の層別含水指標');
+  await page.locator('#debugToggle').uncheck();
 
   await page.locator('#thermalCameraToggle').click();
   await page.waitForFunction(() => document.querySelector('#thermalCameraToggle').textContent.includes('終了'));

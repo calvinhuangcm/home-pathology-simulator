@@ -362,6 +362,15 @@
 .debug-toggle { display: flex; align-items: center; gap: 7px; margin: 12px 0; font-size: 11px; color: var(--cyan); }
 .field-label { display: block; color: var(--muted); font-size: 11px; margin: 10px 0 6px; }
 #crossSectionCanvas { width: 100%; height: auto; margin-top: 8px; }
+.depth-profile-panel { margin-top: 12px; padding: 10px; border: 1px solid rgba(85,214,230,.2); border-radius: 9px; background: rgba(255,255,255,.025); }
+.depth-profile-heading { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 8px; color: #b8eaf0; font-size: 10px; }
+.depth-profile-heading span { color: var(--muted); font-size: 9px; font-variant-numeric: tabular-nums; }
+.depth-profile { display: grid; gap: 6px; }
+.depth-profile-row { display: grid; grid-template-columns: minmax(72px, 1fr) minmax(50px, 1.2fr) 55px; align-items: center; gap: 7px; min-height: 13px; }
+.depth-profile-name { overflow: hidden; color: #c7dce8; font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.depth-profile-track { height: 7px; overflow: hidden; border-radius: 5px; background: rgba(140,170,190,.16); }
+.depth-profile-track i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg,#238fa8,#48c1d2,#f4b564); }
+.depth-profile-value { color: var(--muted); font-size: 9px; text-align: right; font-variant-numeric: tabular-nums; }
 #dryingStatus { margin-top: 12px; }
 .field-legend { position: absolute; top: 130px; left: 14px; right: 14px; color: #bdd8e7; font-size: 10px; pointer-events: none; text-shadow: 0 1px 3px #000; }
 .legacy-notice { color: var(--amber); }

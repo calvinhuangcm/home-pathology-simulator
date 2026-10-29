@@ -37,6 +37,9 @@ DOM controls / pointer raycast
 - `SimulationEngine.update(realDelta)` 累積時間後，以 0.05 秒固定步長更新修復、水分與損傷。Pause、1×、5×、20× 共用同一演算法。瀏覽器背景暫停，長幀最多取 0.1 秒，不追算背景經過時間。
 - 含水指標範圍 0–100，本情境平衡乾燥基線為 8；它是教學用相對含水／飽和指標，不是校準後的建材重量含水率。
 - 材質界面採 harmonic conductivity，pairwise flux 同時加減。正常防水層通透很低；破損處可通過。RC 較慢、砂漿較快，裂縫有連通方向傳輸。未被修繕的水分不會憑空消失。
+- 每個 transport tick 先快取各格通透率，避免同一格在多條相鄰邊重複計算。一般通量路徑維持原有速度；只有原始通量會讓任何格子越過 8–100 邊界時，才啟用收／入水預算限流，縮放成對邊通量，避免逐格 clamp 製造或吞掉水分。水源與蒸散仍是獨立的外部輸入／輸出步驟，不納入封閉 transport 的內部守恆測試。
+- 封閉格網、高通透係數、停用蒸散的 50 tick 測試確認全格總量誤差小於 `1e-6` 且每格維持在 8–100。這是教學網格的數值穩定性檢查，不是材料參數校準。
+- `SimulationEngine.update()` 只在至少完成一個固定物理 tick 後重算全域格網 metrics；正常 RAF 之間未跨過 tick 時略過重複彙總。
 - 外側入口在左上方，RC 水路斜向移動後向下，到較低室內出口再擴散。表面裂縫只是可見線索，並不把來源座標直接交給正常模式使用者。
 - 蒸散依材質不同，表面較快、RC 較慢。白華依濕潤與蒸散條件累積，黴菌需持續潮濕，漆面損傷依潮濕及鹽分累積；乾燥不自動清除歷史損傷。
 - PU 從鑽孔的 RC cell 注入，沿 crack edge 傳輸，遇水反應成膨脹填充，降低局部通透率。串聯水路阻力提高時，來源流量自然降低。錯誤孔不會把材料送往其他裂縫。
@@ -76,9 +79,9 @@ Renderer 沿用 Three.js，Canvas moistureField 可投影到牆面或天花。�
 | `index.html`, `src/ui/styles.css` | 原 UI DOM / 樣式與最少控制項調整 |
 | `src/main.ts` | 小型啟動入口 |
 | `src/simulation/types.ts`, `wallModel.ts` | cell / source / repair 型別、座標索引與網格邊 |
-| `src/simulation/SimulationEngine.ts` | 固定 tick、快照／還原、彙總讀值 |
+| `src/simulation/SimulationEngine.ts` | 固定 tick、快照／還原；只在物理 tick 前進後彙總全域讀值 |
 | `src/simulation/diagnostics.ts` | 證據事件、診斷假設／評分、有限單支排水測試、地下水位轉教學水壓 |
-| `waterSimulation.ts`, `damageSimulation.ts`, `repairSimulation.ts` | 獨立的水分、損傷、PU 更新 |
+| `waterSimulation.ts`, `damageSimulation.ts`, `repairSimulation.ts` | 獨立的水分、損傷、PU 更新；水分傳輸重用通透率／限流暫存區，極端係數才啟用成對通量限流 |
 | `src/scenarios/exteriorCrack.ts` | Scenario 01 幾何、材料、來源及裂縫連通資料 |
 | `src/scenarios/bathroom.ts`, `src/simulation/bathroomRepairs.ts` | 02A／02B 初始資料、驗證供水與修繕動作、作業狀態更新 |
 | `src/renderer/bathroomScene.ts`, `src/ui/bathroomControls.ts` | 樓板／明暗管幾何、供水控制、觀察面及修繕 UI |
@@ -88,7 +91,7 @@ Renderer 沿用 Three.js，Canvas moistureField 可投影到牆面或天花。�
 | `src/ui/diagnosticControls.ts`, `diagnosisControls.ts` | 支管／地下水情境控制、證據時間軸、多來源假設與 Diagnosis Score |
 | `src/renderer/moistureField.ts` | state → Canvas texture 與六層切片；不影響 physics |
 | `src/renderer/sceneGeometry.js`, `externalAssets.js` | 保留的 Three.js 幾何、程序貼圖與選用外部資產 |
-| `src/ui/engineBridge.js`, `simulationControls.ts` | 舊 UI view model 及新儀器／DEBUG 控制 |
+| `src/ui/engineBridge.js`, `simulationControls.ts` | 舊 UI view model 及新儀器／DEBUG 控制；剖面模式依同一探頭格點唯讀顯示各材料層的引擎含水指標 |
 | `src/legacy/prototype.js` | 過渡 controller、既有手勢／UI 與未移植情境。禁止在此新增物理。 |
 | `public/vendor/three-r128.min.js` | 直接抽出原版 Three.js，保留 MIT 授權標頭 |
 | `tests/` | 引擎因果測試與真實瀏覽器互動測試 |
@@ -100,6 +103,7 @@ Renderer 沿用 Three.js，Canvas moistureField 可投影到牆面或天花。�
 - Epoxy、凝膠與自由塗刷防水工具已有各自受限的模擬用途；不得把表面塗層當成管線／內部水源修復。表面整修目前限新案例既有支援範圍。
 - 舊版 controller 仍約 2200 行，部分 UI 與舊情境邏輯尚未完全型別化。這是刻意保留的遷移邊界，避免一次破壞其他流程。
 - 六層使用簡化網格，不反映實際層厚、孔隙率、溫度與材料本構。表面可視裂縫沿用既有幾何；內部裂縫依新模型，兩者不要求逐點重合。
+- Node.js 單次基準可比較目前版本各情境的引擎純計算耗時；結果不是 Three.js／Canvas 整頁 FPS，也不是 Android、平板或低階裝置效能證明。20× 速度的瀏覽器長幀與主執行緒負載仍需在受控裝置上量測。
 - 3D 場景需要 WebGL。遠端模型／貼圖由使用者選擇載入，可能受網路或供應商限制；預設本機程序資產不依賴網路。這次沒有驗證所有遠端資產仍可下載。
 - 觸控以 Chrome 的行動裝置與多點觸控模擬驗證，未在實體 Android 平板執行。
 

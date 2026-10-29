@@ -30,7 +30,9 @@ export class SimulationEngine {
     if (!this.state.running || this.state.timeScale === 0 || !Number.isFinite(deltaTime) || deltaTime <= 0) return;
     // Caller bounds background-frame gaps. All simulation time here is conserved.
     this.accumulator += deltaTime * this.state.timeScale;
+    let advanced = false;
     while (this.accumulator + 1e-9 >= this.fixedStep) {
+      advanced = true;
       updateBathroomRepairs(this.state, this.fixedStep);
       updateRepairs(this.state, this.fixedStep, this.delta);
       updateWater(this.state, this.fixedStep, this.delta, this.slabDelta, this.floorDelta);
@@ -39,7 +41,9 @@ export class SimulationEngine {
       updateDrainBranchTest(this.state, this.fixedStep);
       this.accumulator -= this.fixedStep;
     }
-    this.updateMetrics();
+    // Aggregate grid metrics only when physics changed. At normal frame rates,
+    // many animation frames do not cross a fixed simulation tick.
+    if (advanced) this.updateMetrics();
   }
   private updateMetrics(): void {
     const s = this.state;

@@ -12,14 +12,59 @@ export function permeability(cell: WallCell): number {
     * (1 - cell.surfaceCoating * .85);
 }
 const harmonic = (a: number, b: number): number => 2 * a * b / Math.max(.00001, a + b);
-function transport(grid: WallModel, dt: number, delta: Float64Array, defects: Set<number>, gravity: -1 | 0 | 1 = 0, dryingRates?: number[]): { flow: number; reference: number } {
+// Permeability is a cell property for the duration of one transport step. Each
+// cell participates in several edges, so memoize the derived value in a reusable
+// scratch buffer instead of recalculating its material/repair factors per edge.
+// The buffer is deliberately external to SimulationState and refreshed every
+// tick, after repairs have updated the cells.
+const permeabilityBuffers = new WeakMap<WallModel, Float64Array>();
+function cellPermeabilities(grid: WallModel): Float64Array {
+  let values = permeabilityBuffers.get(grid);
+  if (!values || values.length !== grid.cells.length) {
+    values = new Float64Array(grid.cells.length);
+    permeabilityBuffers.set(grid, values);
+  }
+  for (let i = 0; i < grid.cells.length; i++) values[i] = permeability(grid.cells[i]);
+  return values;
+}
+type FluxLimitBuffers = { outgoing: Float64Array; incoming: Float64Array; outScale: Float64Array; inScale: Float64Array };
+const fluxLimitBuffers = new WeakMap<WallModel, FluxLimitBuffers>();
+function getFluxLimitBuffers(grid: WallModel): FluxLimitBuffers {
+  let buffers = fluxLimitBuffers.get(grid);
+  if (!buffers || buffers.outgoing.length !== grid.cells.length) {
+    buffers = {
+      outgoing: new Float64Array(grid.cells.length),
+      incoming: new Float64Array(grid.cells.length),
+      outScale: new Float64Array(grid.cells.length),
+      inScale: new Float64Array(grid.cells.length),
+    };
+    fluxLimitBuffers.set(grid, buffers);
+  }
+  return buffers;
+}
+function rawEdgeFlow(cells: WallCell[], cellK: Float64Array, edge: WallModel['edges'][number], gravity: -1 | 0 | 1): number {
+  const { a, b, axis, channel, direction } = edge;
+  const ca = cells[a], cb = cells[b], k = harmonic(cellK[a], cellK[b]);
+  let flow = (ca.moisture - cb.moisture) * k;
+  if (channel) {
+    const up = direction > 0 ? ca : cb, down = direction > 0 ? cb : ca;
+    flow += direction * Math.min(up.moisture - 8, 100 - down.moisture) * k * 2;
+  }
+  if (gravity && axis === 'z') {
+    const gravityDrive = gravity < 0 ? Math.min(cb.moisture - 8, 100 - ca.moisture) : Math.min(ca.moisture - 8, 100 - cb.moisture);
+    flow += gravity * gravityDrive * 1.5 * k;
+  }
+  return flow;
+}
+export function transportGrid(grid: WallModel, dt: number, delta: Float64Array, defects: Set<number>, gravity: -1 | 0 | 1 = 0, dryingRates?: number[]): { flow: number; reference: number } {
   const { cells, edges, cols, rows } = grid;
+  const cellK = cellPermeabilities(grid);
   delta.fill(0);
   let infiltration = 0, reference = 0;
   for (const cell of cells) cell.flowX = cell.flowY = cell.flowZ = 0;
   for (const { a, b, axis, channel, direction } of edges) {
     const ca = cells[a], cb = cells[b];
-    const k = harmonic(permeability(ca), permeability(cb));
+    const k = harmonic(cellK[a], cellK[b]);
     let flow = (ca.moisture - cb.moisture) * k;
     if (channel) {
       const up = direction > 0 ? ca : cb, down = direction > 0 ? cb : ca;
@@ -34,8 +79,43 @@ function transport(grid: WallModel, dt: number, delta: Float64Array, defects: Se
     // Actual flux across the membrane into the slab, not water added to the tile surface.
     if (axis === 'z' && ca.material === 'rc' && cb.material === 'waterproof') {
       infiltration += Math.max(0, -flow);
-      const referenceK = defects.has(b) ? harmonic(permeability(ca), .0001 + .96 * .8) : k;
+      const referenceK = defects.has(b) ? harmonic(cellK[a], .0001 + .96 * .8) : k;
       reference += Math.max(0, (cb.moisture - ca.moisture + gravityDrive) * referenceK);
+    }
+  }
+  // Keep the ordinary path fast, but if a teaching coefficient would push a
+  // cell outside its [8, 100] range, limit all edge fluxes together. Limiting
+  // outgoing and incoming budgets before applying them avoids water appearing
+  // or disappearing through per-cell clamps at extreme permeability values.
+  let needsFluxLimit = false;
+  for (let i = 0; i < cells.length; i++) {
+    const projected = cells[i].moisture + delta[i];
+    if (projected < 8 || projected > 100) { needsFluxLimit = true; break; }
+  }
+  if (needsFluxLimit) {
+    const buffers = getFluxLimitBuffers(grid);
+    buffers.outgoing.fill(0); buffers.incoming.fill(0);
+    for (const edge of edges) {
+      const flow = rawEdgeFlow(cells, cellK, edge, gravity), amount = Math.abs(flow * dt);
+      if (flow >= 0) { buffers.outgoing[edge.a] += amount; buffers.incoming[edge.b] += amount; }
+      else { buffers.outgoing[edge.b] += amount; buffers.incoming[edge.a] += amount; }
+    }
+    for (let i = 0; i < cells.length; i++) {
+      const available = Math.max(0, cells[i].moisture - 8), capacity = Math.max(0, 100 - cells[i].moisture);
+      buffers.outScale[i] = buffers.outgoing[i] > 0 ? Math.min(1, available / buffers.outgoing[i]) : 1;
+      buffers.inScale[i] = buffers.incoming[i] > 0 ? Math.min(1, capacity / buffers.incoming[i]) : 1;
+    }
+    delta.fill(0); infiltration = 0;
+    for (const cell of cells) cell.flowX = cell.flowY = cell.flowZ = 0;
+    for (const edge of edges) {
+      const { a, b, axis } = edge;
+      const rawFlow = rawEdgeFlow(cells, cellK, edge, gravity);
+      const source = rawFlow >= 0 ? a : b, destination = rawFlow >= 0 ? b : a;
+      const flow = rawFlow * Math.min(buffers.outScale[source], buffers.inScale[destination]);
+      delta[a] -= flow * dt; delta[b] += flow * dt;
+      const ca = cells[a], cb = cells[b], key = axis === 'x' ? 'flowX' : axis === 'y' ? 'flowY' : 'flowZ';
+      ca[key] += flow; cb[key] += flow;
+      if (axis === 'z' && ca.material === 'rc' && cb.material === 'waterproof') infiltration += Math.max(0, -flow);
     }
   }
   const evaporation = dryingRates ?? [.018, .012, .009, .003, .002, .004];
@@ -47,10 +127,10 @@ function transport(grid: WallModel, dt: number, delta: Float64Array, defects: Se
   return { flow: infiltration / 160, reference: reference / 160 };
 }
 export function updateWater(state: SimulationState, dt: number, delta: Float64Array, slabDelta: Float64Array = new Float64Array(state.slab?.cells.length ?? 0), floorDelta: Float64Array = new Float64Array(state.floor.cells.length)): void {
-  transport(state.wall, dt, delta, new Set());
+  transportGrid(state.wall, dt, delta, new Set());
   const areaSource = state.waterSources.find(s => s.kind === 'area');
-  const slabFlux = state.slab ? transport(state.slab, dt, slabDelta, new Set(areaSource?.defects), -1) : null;
-  transport(state.floor, dt, floorDelta, new Set(), 1, [.022, .006, .002]);
+  const slabFlux = state.slab ? transportGrid(state.slab, dt, slabDelta, new Set(areaSource?.defects), -1) : null;
+  transportGrid(state.floor, dt, floorDelta, new Set(), 1, [.022, .006, .002]);
   let floorInflow = 0;
   for (const junction of state.floorJunctions) {
     const a = state.wall.cells[junction.wallCell], b = state.floor.cells[junction.floorCell];

@@ -140,6 +140,25 @@ try {
   await page.locator('#thermalCameraToggle').click();
   await page.waitForFunction(() => document.querySelector('#fieldLegend').textContent.includes('熱像儀'));
   assert.match(await page.locator('#thermalCameraReadout').innerText(), /表面估算 .*°C/);
+  await page.locator('#debugToggle').check();
+  await page.locator('#frontViewBtn').click();
+  await page.locator('[data-mode="inspect"]').click();
+  const probeScreenPoint = await page.evaluate(() => window.__simTest.project(-.25, 2.4));
+  await page.mouse.move(probeScreenPoint.x, probeScreenPoint.y);
+  await page.waitForFunction(() => document.querySelectorAll('#depthProfileRows [data-layer]').length === 6);
+  const profileReadback = await page.evaluate(() => {
+    const state = window.__simTest.snapshot(), point = state.tools.probe, grid = state.wall;
+    const x = Math.floor(Math.max(0, Math.min(.99999, (point.x + grid.width / 2) / grid.width)) * grid.cols);
+    const y = Math.floor(Math.max(0, Math.min(.99999, point.y / grid.height)) * grid.rows);
+    return [...document.querySelectorAll('#depthProfileRows [data-layer]')].map(row => {
+      const layer = Number(row.dataset.layer), expected = grid.cells[layer * grid.cols * grid.rows + y * grid.cols + x].moisture;
+      return { displayed: row.querySelector('[data-value]').dataset.value, expected: expected.toFixed(1) };
+    });
+  });
+  assert.equal(profileReadback.length, 6, 'probe profile shows each wall layer at one shared grid coordinate');
+  assert.ok(profileReadback.every(item => item.displayed === item.expected), 'displayed profile values come from the exact simulation cells');
+  assert.doesNotMatch(await page.locator('#depthProfileRows').innerText(), /%/, 'profile labels values as an index, not calibrated moisture percent');
+  await page.locator('#debugToggle').uncheck();
   for (const [id, value] of [['thermalOutdoor', 21], ['thermalHumidity', 90], ['thermalSolar', 100], ['thermalSunMinutes', 30], ['thermalEmissivity', 40], ['thermalReflected', 35]]) {
     await page.locator(`#${id}`).evaluate((input, next) => { input.value = String(next); input.dispatchEvent(new Event('input', { bubbles: true })); input.dispatchEvent(new Event('change', { bubbles: true })); }, value);
   }

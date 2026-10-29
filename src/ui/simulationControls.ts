@@ -2,7 +2,7 @@ import { floorLayerNames } from '../simulation/floorModel';
 import type { SimulationEngine } from '../simulation/SimulationEngine';
 import type { FieldView } from '../renderer/moistureField';
 import { drawSection } from '../renderer/moistureField';
-import { layerNames } from '../simulation/wallModel';
+import { cellIndex, gridPoint, layerNames } from '../simulation/wallModel';
 import { appendDiagnosticEvidence } from '../simulation/diagnostics';
 import { thermalAssessment } from '../tools/thermalCamera';
 
@@ -37,7 +37,13 @@ export function createSimulationControls(engine: SimulationEngine) {
       <p class="hint">水流箭頭為當前通量；PU 圖層為實際材料分布。</p>
     </div>
     <div id="layerControls" hidden><label class="field-label" for="layerSelect">剖面觀察材質</label><select id="layerSelect">${layerNames.map((label, i) => `<option value="${i}" ${i === 3 ? 'selected' : ''}>${label}</option>`).join('')}</select>
-      <p class="hint" id="sectionCaption">六層水平切片，藍色為含水量</p><canvas id="crossSectionCanvas" width="300" height="138" aria-label="六層牆體水平切片"></canvas></div>`;
+      <p class="hint" id="sectionCaption">六層水平切片，藍色為含水量</p><canvas id="crossSectionCanvas" width="300" height="138" aria-label="六層牆體水平切片"></canvas>
+      <div class="depth-profile-panel">
+        <div class="depth-profile-heading"><strong>探頭位置的分層含水指標</strong><span id="depthProfilePosition">未選取探頭位置</span></div>
+        <div id="depthProfileRows" class="depth-profile" aria-label="同一探頭網格位置的材料層含水狀態"><p class="hint">移動含水率儀探頭，查看目前位置各層的相對含水指標。</p></div>
+        <p class="hint">0–100 為教學相對指標；不是重量含水率或校正儀器讀值。</p>
+      </div>
+    </div>`;
   document.querySelector('.inspector .scroll')!.prepend(panel);
   const get = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
   get<HTMLInputElement>('debugToggle').addEventListener('change', e => { view.debug = (e.target as HTMLInputElement).checked; });
@@ -120,6 +126,27 @@ export function createSimulationControls(engine: SimulationEngine) {
       get<HTMLInputElement>('thermalReflected').value = String(env.reflectedTemperatureC);
       applyThermalSettings(false);
       const probe = s.tools.probeDomain === view.surface && s.tools.probe ? s.tools.probe : { x: 0, y: defaultDepth };
+      const profileRows = get<HTMLDivElement>('depthProfileRows');
+      const selectedProbe = s.tools.probeDomain === view.surface ? s.tools.probe : null;
+      const profileGrid = s[view.surface];
+      profileRows.replaceChildren();
+      get('depthProfilePosition').textContent = selectedProbe ? `模型座標 ${selectedProbe.x.toFixed(2)}, ${selectedProbe.y.toFixed(2)}` : '未選取探頭位置';
+      if (profileGrid && selectedProbe) {
+        const cell = gridPoint(profileGrid, selectedProbe);
+        profileGrid.layers.forEach((_, layer) => {
+          const value = profileGrid.cells[cellIndex(profileGrid, cell.x, cell.y, layer)].moisture;
+          const row = document.createElement('div'); row.className = 'depth-profile-row'; row.dataset.layer = String(layer);
+          const name = document.createElement('span'); name.className = 'depth-profile-name'; name.textContent = names[layer];
+          const track = document.createElement('div'); track.className = 'depth-profile-track'; track.setAttribute('role', 'meter');
+          track.setAttribute('aria-label', `${names[layer]} 含水指標`);
+          track.setAttribute('aria-valuemin', '8'); track.setAttribute('aria-valuemax', '100'); track.setAttribute('aria-valuenow', value.toFixed(1));
+          const fill = document.createElement('i'); fill.style.width = `${Math.max(0, Math.min(100, (value - 8) / 92 * 100))}%`; track.append(fill);
+          const reading = document.createElement('strong'); reading.className = 'depth-profile-value'; reading.dataset.value = value.toFixed(1); reading.textContent = `${value.toFixed(1)} / 100`;
+          row.append(name, track, reading); profileRows.append(row);
+        });
+      } else {
+        const hint = document.createElement('p'); hint.className = 'hint'; hint.textContent = '移動含水率儀探頭，查看目前位置各層的相對含水指標。'; profileRows.append(hint);
+      }
       const thermal = view.thermal ? thermalAssessment(s, probe, view.surface) : null;
       get('thermalCameraReadout').textContent = thermal === null ? '熱像儀關閉' : `表面估算 ${thermal.apparentTemperatureC.toFixed(1)}°C · 露點 ${thermal.dewPointC.toFixed(1)}°C · 判讀信心 ${thermal.confidence}% · ${thermal.warnings.join('；') || '目前條件下可比較溫度異常'} · 非實測值`;
       get('sectionCaption').textContent = `${floor ? '地板三層 · 距牆深度' : view.surface === 'slab' ? '樓板六層 · 深度座標' : '牆體六層 · 高度'} ${(s.tools.probeDomain === view.surface ? s.tools.probe?.y ?? defaultDepth : defaultDepth).toFixed(2)} · 藍色為水分`;

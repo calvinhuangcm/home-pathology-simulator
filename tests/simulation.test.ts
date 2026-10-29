@@ -5,7 +5,7 @@ import { drill } from '../src/tools/drill';
 import { insertNeedle, startInjection } from '../src/tools/injector';
 import { moistureReading } from '../src/tools/moistureMeter';
 import { exteriorSource, interiorOutlet } from '../src/scenarios/exteriorCrack';
-import { permeability, updateWater } from '../src/simulation/waterSimulation';
+import { permeability, transportGrid, updateWater } from '../src/simulation/waterSimulation';
 
 test('dry wall stays dry without rain; pausing freezes physics', () => {
   const e = new SimulationEngine();
@@ -124,4 +124,55 @@ test('material permeability ordering, bounded fields, and no moisture created by
     previous = total();
   }
   assert.ok(e.state.wall.cells.every(c => Number.isFinite(c.moisture) && c.moisture >= 8 && c.moisture <= 100));
+});
+
+test('high teaching permeability limits simultaneous flux and conserves a closed grid', () => {
+  const e = new SimulationEngine();
+  e.state.wall.cells.forEach(cell => { cell.moisture = 8; });
+  e.state.cracks.forEach(index => { e.state.wall.cells[index].permeabilityScale = 2; });
+  e.state.wall.cells[e.state.cracks[Math.floor(e.state.cracks.length / 2)]].moisture = 100;
+  const total = () => e.state.wall.cells.reduce((sum, cell) => sum + cell.moisture, 0);
+  const delta = new Float64Array(e.state.wall.cells.length);
+  const initial = total();
+  for (let tick = 0; tick < 50; tick++) {
+    transportGrid(e.state.wall, .05, delta, new Set(), 0, [0, 0, 0, 0, 0, 0]);
+    const current = total();
+    assert.ok(Math.abs(current - initial) < 1e-6, `closed transport changed total moisture at tick ${tick}: ${initial} -> ${current}`);
+    assert.ok(e.state.wall.cells.every(cell => cell.moisture >= 8 && cell.moisture <= 100));
+  }
+});
+
+test('bathroom area source closes the open-system water balance, including saturation and drying', () => {
+  const e = new SimulationEngine('bathroom');
+  const state = e.state, area = state.waterSources.find(source => source.kind === 'area')!;
+  assert.ok(area, 'bathroom scenario must include its area source');
+  for (const grid of [state.wall, state.slab, state.floor]) if (grid) {
+    grid.edges.length = 0;
+    grid.cells.forEach(cell => { cell.moisture = 8; cell.surfaceCoating = 0; });
+  }
+  state.junctions.length = 0;
+  state.floorJunctions.length = 0;
+  state.waterSources.forEach(source => { source.enabled = source.kind === 'area'; });
+  const slab = state.slab!;
+  slab.cells[area.footprint[0]].moisture = 99.8;
+
+  const dt = .05, inputPerCell = state.environment.bathroomUse * 12 * dt;
+  const dryRates = [ .018, .012, .009, .003, .002, .004 ];
+  let expected = 0;
+  for (const grid of [state.wall, state.slab, state.floor]) if (grid) {
+    const rates = grid === state.floor ? [.022, .006, .002] : dryRates;
+    const afterDrying = grid.cells.map((cell, index) => {
+      const layer = Math.floor(index / (grid.cols * grid.rows));
+      return cell.moisture - (cell.moisture - 8) * rates[layer] * (1 - .8 * cell.surfaceCoating) * dt;
+    });
+    expected += afterDrying.reduce((sum, moisture) => sum + moisture, 0);
+    if (grid === slab) {
+      for (const index of area.footprint) expected += Math.min(100, afterDrying[index] + inputPerCell) - afterDrying[index];
+    }
+  }
+  updateWater(state, dt, new Float64Array(state.wall.cells.length), new Float64Array(slab.cells.length), new Float64Array(state.floor.cells.length));
+  const actual = [state.wall, state.slab, state.floor].filter((grid): grid is NonNullable<typeof grid> => !!grid)
+    .flatMap(grid => grid.cells).reduce((sum, cell) => sum + cell.moisture, 0);
+  assert.ok(Math.abs(actual - expected) < 1e-8, `open-system water balance mismatch: expected ${expected}, got ${actual}`);
+  assert.equal(slab.cells[area.footprint[0]].moisture, 100, 'area source saturates the teaching index without exceeding its upper bound');
 });

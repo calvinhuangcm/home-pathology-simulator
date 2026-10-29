@@ -16,6 +16,7 @@
 | 因果式水分模擬 | 漏水來源、材質傳輸、裂縫、防水層、蒸散、累積損傷及修復效果由模擬狀態推導；不使用隨機含水率。 |
 | 牆體與剖面觀察 | 以既有 Three.js 場景顯示牆面、材料層、水分熱區、裂縫及修繕狀態。 |
 | 診斷工具 | 含水率儀、教學用熱像估算、鑽孔、PU 注入、Epoxy、凝膠、表面防水及診斷回饋。 |
+| 分層含水對照 | DEBUG／剖面模式下，依目前探頭位置顯示各材料層的模擬含水指標；數值取自引擎網格，0–100 是相對教學指標。 |
 | 室內地板 | 獨立地板材質層、地板含水量測、有限時間的定點淋水測試與牆腳水分交換。 |
 | 時間與語言 | 暫停或切換 1×、5×、20×；介面提供繁體中文、英文及日文。 |
 
@@ -121,6 +122,7 @@ Learn building leak diagnosis through cause-and-effect simulation. Track water s
 | Causal moisture simulation | Sources, material transport, cracks, waterproofing, evaporation, cumulative damage, and repair effects are derived from simulation state; moisture readings are not random. |
 | Wall and cutaway views | The existing Three.js scene presents wall surfaces, material layers, moisture fields, cracks, and repair state. |
 | Diagnostic tools | Moisture meter, educational thermal estimates, drilling, PU injection, Epoxy, gel, surface waterproofing, and diagnostic feedback. |
+| Layer moisture profile | In DEBUG/cutaway mode, inspect the simulated moisture index across material layers at the current probe position; values come from the engine grid and use a relative teaching scale. |
 | Indoor floor | Separate floor material layers, floor measurements, finite-duration spot water tests, and moisture exchange at the wall junction. |
 | Time and language controls | Pause or use 1×, 5×, and 20× speed; the interface supports Traditional Chinese, English, and Japanese. |
 
@@ -226,6 +228,7 @@ AGENTS.md contains development guidance adapted from course materials and is exp
 | 因果関係に基づく含水シミュレーション | 水源、材料内の移動、ひび割れ、防水層、蒸発、累積損傷、補修効果をシミュレーション状態から計算します。含水率に乱数は使いません。 |
 | 壁面と断面の表示 | 既存の Three.js シーンに壁面、材料層、含水分布、ひび割れ、補修状態を表示します。 |
 | 診断ツール | 含水計、教材用の熱画像推定、穿孔、PU 注入、Epoxy、ゲル、表面防水、診断フィードバックを利用できます。 |
+| 層別含水プロファイル | DEBUG／断面モードで、現在の探頭位置における各材料層のシミュレーション含水指標を確認できます。数値はエンジングリッド由来の相対的な教材用指標です。 |
 | 室内床面 | 独立した床材層、含水測定、時間制限付きの局所散水テスト、壁脚部との水分交換を備えています。 |
 | 時間と言語の操作 | 一時停止、1×・5×・20×の速度変更に対応し、繁体字中国語、英語、日本語で表示できます。 |
 
