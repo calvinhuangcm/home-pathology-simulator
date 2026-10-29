@@ -1,0 +1,14 @@
+Required Notice: Copyright (c) 2026 Calvin Huang
+
+This notice and the PolyForm Noncommercial License 1.0.0 apply to original
+simulator software, interface, and project documentation authored by Calvin
+Huang, except for the exclusions below.
+
+AGENTS.md is excluded from this project license because it contains development
+guidance adapted from course materials. This notice grants no rights to
+third-party course content or other material whose rights belong to someone
+else.
+
+Third-party software and assets are excluded from the PolyForm license and
+remain under their own terms. See THIRD-PARTY-NOTICES.md and the attribution
+files shipped with those assets.

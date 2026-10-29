@@ -77,6 +77,12 @@ pnpm test:browser
 
 漏水症狀的位置不一定等於水源。清理壁癌、批土或表面塗裝不會停止持續供水；應先診斷來源，再選擇相符的源頭修復。鑽孔、注入、化學材料與結構判斷均可能涉及現場安全及專業風險，請勿將本模擬器當作施工參數或工程保證。
 
+### 授權與第三方素材
+
+本專案由 Calvin Huang 撰寫的原創程式碼、模擬器介面與專案文件，依 [PolyForm Noncommercial License 1.0.0](LICENSE) 授權。授權允許依條款作非商業用途、修改及散布；商業用途不在此授權範圍內，須另向權利人取得許可。授權原文另將慈善組織、教育機構、公共研究組織、公共安全或健康組織、環境保護組織及政府機關的使用列為允許用途，不因經費來源而改變。若你的要求是這些組織也不得在任何有資金往來的情況下使用，PolyForm 標準條款可能不完全符合，需另行擬定並審閱條款。法律條文以英文版 `LICENSE` 為準；本專案屬於「公開原始碼、限非商業使用」，不是 OSI 定義下的開源軟體。
+
+`AGENTS.md` 含有依課程教材整理的開發指引，明確排除於本專案 PolyForm 授權範圍之外；其中第三方教材表達的權利仍屬各自權利人。第三方軟體與素材也保留各自授權，不因本專案使用 PolyForm 而改變。詳見 [`NOTICE`](NOTICE) 與[第三方授權清單](THIRD-PARTY-NOTICES.md)。網站建置時會將授權與聲明檔一併複製到 `dist/`，GitHub Pages 也提供授權連結。
+
 <a id="english"></a>
 ## English
 
@@ -152,6 +158,12 @@ See the [architecture guide](docs/ARCHITECTURE.md) for module responsibilities, 
 
 The visible location of water damage may differ from the source. Cleaning wall damage, applying putty, or repainting will not stop an active water source. Diagnose the source before selecting a source-level repair. Drilling, injection, chemicals, and structural assessment involve site-specific safety and professional risks; do not treat this simulator as a set of construction parameters or an engineering guarantee.
 
+### License and Third-Party Materials
+
+The original application code, simulator interface, and project documentation authored by Calvin Huang are licensed under the [PolyForm Noncommercial License 1.0.0](LICENSE). It permits use, modification, and redistribution for permitted noncommercial purposes under its terms. Commercial purposes are not granted by this license and require separate permission from the rights holder. The license also expressly permits use by charitable organizations, educational institutions, public research organizations, public safety or health organizations, environmental protection organizations, and government institutions regardless of funding source. If you intend to prohibit every funded or paid use by those organizations too, the standard PolyForm terms may not fully match that requirement and need separate legal review. The English `LICENSE` file is authoritative. This is a source-available, noncommercial project, not open source under the OSI definition.
+
+`AGENTS.md` contains development guidance adapted from course materials and is expressly excluded from this project license; rights to any third-party course material remain with their respective owners. Third-party software and assets keep their own licenses, which are not changed by this project's PolyForm license. See [`NOTICE`](NOTICE) and the [third-party license inventory](THIRD-PARTY-NOTICES.md). The build copies these license and notice files into `dist/`, and GitHub Pages links to them.
+
 <a id="japanese"></a>
 ## 日本語
 
@@ -226,3 +238,9 @@ pnpm test:browser
 ### 専門性と安全に関する注意
 
 水による症状の位置は、水源の位置と異なることがあります。壁面の清掃、パテ処理、再塗装では、継続中の水源は止まりません。まず水源を診断し、その水源に対する補修方法を選んでください。穿孔、注入、薬剤、構造判断には現場固有の安全面と専門上のリスクがあります。本シミュレーターを施工条件や工事保証として扱わないでください。
+
+### ライセンスと第三者素材
+
+Calvin Huang が作成した本プロジェクトのオリジナルコード、シミュレーター UI、プロジェクト文書は、[PolyForm Noncommercial License 1.0.0](LICENSE) の下で提供されます。条項に従う非商用目的での利用、改変、再配布が許可されます。商用目的はこのライセンスの許諾範囲外であり、権利者から別途許可を得る必要があります。また、慈善団体、教育機関、公共研究機関、公共安全・健康機関、環境保護団体、政府機関による利用は、資金源にかかわらず許可されると原文に定められています。これらの機関による資金提供・有償利用もすべて禁止したい場合、PolyForm の標準条項では要件を完全に満たさない可能性があり、別途条項の作成と確認が必要です。法的な本文は英語版の `LICENSE` が優先されます。本プロジェクトは「ソース公開・非商用」であり、OSI の定義におけるオープンソースではありません。
+
+`AGENTS.md` には講義資料をもとに整理した開発ガイドが含まれるため、本プロジェクトの PolyForm ライセンスの対象外です。第三者の教材に関する権利は、それぞれの権利者に帰属します。第三者のソフトウェアや素材にも個別のライセンスが適用され、本プロジェクトの PolyForm ライセンスによって変更されません。[`NOTICE`](NOTICE) と[第三者ライセンス一覧](THIRD-PARTY-NOTICES.md)を参照してください。ビルド時にライセンスと通知ファイルを `dist/` にコピーし、GitHub Pages からも確認できます。

@@ -213,3 +213,14 @@ These sources support general diagnostic principles only. They do not replace Ta
   - [FLIR：以熱像協助找漏水](https://www.flir.com/discover/professional-tools/how-to-detect-a-water-leak-with-thermal-imaging)：熱像呈現溫度差異，不是直接看見牆內水分；熱像線索需搭配含水儀及其他證據確認。
 - [FLIR: Emissivity and reflected temperature](https://www.flir.com/en-gb/discover/professional-tools/how-does-emissivity-affect-thermal-imaging/); [Sika: Injection materials and systems](https://www.sika.com/en/construction/injections.html): Thermal interpretation is affected by surface emissivity and environmental reflections. Select injection materials according to their product, substrate, moisture, and water-flow conditions; do not apply one material rule to every site.
   - [FLIR：放射率與反射溫度](https://www.flir.com/en-gb/discover/professional-tools/how-does-emissivity-affect-thermal-imaging/)；[Sika：注入材料與系統](https://www.sika.com/en/construction/injections.html)：熱像判讀受表面放射率與環境反射影響；注入材料依產品、基材、含水與水流條件選擇，不能用單一材料規則套用所有現場。
+
+## 10. Licensing and Third-Party Rights
+
+- Keep the canonical PolyForm Noncommercial 1.0.0 text in `LICENSE` unchanged. The project applies it only to Calvin Huang's original simulator code, interface, and project documentation, subject to the exclusions in `NOTICE`.
+  - 保留 `LICENSE` 中 PolyForm Noncommercial 1.0.0 的官方條文，不要自行改寫。此授權僅適用於 Calvin Huang 原創的模擬器程式碼、介面與專案文件，並受 `NOTICE` 所列排除項目限制。
+- `AGENTS.md` is excluded from the PolyForm license because it contains development guidance adapted from course materials. Do not include it in the licensed scope unless the rights for all included course material are confirmed.
+  - `AGENTS.md` 因含有依課程教材整理的開發指引，明確排除於 PolyForm 授權範圍外。除非確認其中所有課程教材內容的授權權利，否則不得把它納入授權範圍。
+- Preserve third-party licenses and attribution independently. When adding bundled or runtime-loaded assets or software, verify its exact upstream license and update `THIRD-PARTY-NOTICES.md`; never claim third-party material under the project's PolyForm license.
+  - 第三方素材與軟體須各自保留授權及來源。新增打包或執行時載入的素材／軟體時，先核對精確的上游授權並更新 `THIRD-PARTY-NOTICES.md`；不得宣稱第三方內容受本專案 PolyForm 授權。
+- Keep the `Required Notice` line in `NOTICE` with distributed copies. The production build copies `LICENSE`, `NOTICE`, and `THIRD-PARTY-NOTICES.md` into `dist/`; after changing licensing files or build output rules, run `npm run build` and confirm all three files are present in `dist/`.
+  - 散布副本時須一併保留 `NOTICE` 的 `Required Notice` 行。正式建置會將 `LICENSE`、`NOTICE` 與 `THIRD-PARTY-NOTICES.md` 複製到 `dist/`；修改授權文件或建置輸出規則後，執行 `npm run build` 並確認三個檔案都在 `dist/`。
