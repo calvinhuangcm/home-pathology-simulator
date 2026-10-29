@@ -1,143 +1,189 @@
-# 壁癌模擬器 · Wall Pathology Simulator · 壁面劣化シミュレーター
+# 壁癌模擬器｜Wall Pathology Simulator｜壁面劣化シミュレーター
 
 [繁體中文](#traditional-chinese) · [English](#english) · [日本語](#japanese)
 
 <a id="traditional-chinese"></a>
 ## 繁體中文
 
-互動式建築滲漏診斷與修繕教學模擬器。使用者可觀察水分如何從不同來源進入牆體或樓板、沿材料與接縫移動、形成表面症狀，再透過量測與源頭修復驗證因果關係。
+以因果模擬學習建築滲漏診斷：追蹤水源、材料內的水分移動與表面損傷，再透過量測及源頭修復驗證判斷。
 
-**線上體驗：**[壁癌模擬器 GitHub Pages](https://calvinhuangcm.github.io/home-pathology-simulator/)
+**線上版：**GitHub Pages 已設定為 GitHub Actions 部署；此次推送會觸發首次部署。網站網址為 [calvinhuangcm.github.io/home-pathology-simulator](https://calvinhuangcm.github.io/home-pathology-simulator/)，待部署工作流程成功後即可使用。
 
-本專案提供工程概念與診斷流程的教學模型，不是現場檢測儀器、結構分析工具或施工指引。模擬數值是相對教學尺度；現場判斷須依勘查結果、產品資料、當地規範與合格專業人員評估。
+### 功能一覽
 
-### 功能概覽
-
-- **分層牆體與三維場景：**保留 Three.js 場景和操作方式，以網格狀態呈現水分、裂縫、防水層、損傷及修復材料。
-- **因果式水分模擬：**來源供水、材質傳輸、裂縫連通、蒸散乾燥與累積損傷由同一模擬狀態更新；量測工具讀取探頭所在位置，不使用隨機讀值。
-- **診斷工具：**含水率量測、熱像教學估算、鑽孔與 PU 注入，以及 Epoxy、凝膠、表面防水和修繕驗證等工具。
-- **地板觀察：**提供獨立地板材質層、含水量測與有限時間的定點淋水測試。
-- **時間控制：**可暫停及調整模擬速度，觀察供水、擴散、損傷、修復與乾燥的變化。
-- **多語介面：**繁體中文、English、日本語；切換語言不會重置模擬進度。
-
-### 情境
-
-| 情境 | 模擬內容 |
+| 功能 | 說明 |
 | --- | --- |
-| 外牆裂縫滲水 | 降雨入水、裂縫傳輸、牆內擴散、偏移的表面症狀、量測、鑽孔、PU 注入與逐步乾燥。 |
-| 浴室防水層失效 | 面狀用水經破損防水層進入樓板，水分可移至樓下天花或相鄰房間牆腳；可比較表面整理與源頭防水修復。 |
-| 熱水暗管破損 | 承壓管線持續供水，症狀位置可與破管位置不同；以關閥、隔離舊管、改接新管及恢復原供水條件驗證。 |
-| 排水、多重漏水、地下室 | 依排水事件測試支管、多來源分別修復，並以情境水位表現地下室相對水壓。 |
+| 因果式水分模擬 | 漏水來源、材質傳輸、裂縫、防水層、蒸散、累積損傷及修復效果由模擬狀態推導；不使用隨機含水率。 |
+| 牆體與剖面觀察 | 以既有 Three.js 場景顯示牆面、材料層、水分熱區、裂縫及修繕狀態。 |
+| 診斷工具 | 含水率儀、教學用熱像估算、鑽孔、PU 注入、Epoxy、凝膠、表面防水及診斷回饋。 |
+| 室內地板 | 獨立地板材質層、地板含水量測、有限時間的定點淋水測試與牆腳水分交換。 |
+| 時間與語言 | 暫停或切換 1×、5×、20×；介面提供繁體中文、英文及日文。 |
 
-外牆裂縫、浴室防水失效與熱水暗管破損已有分層網格模擬。其他可選情境仍有部分使用舊版展示邏輯；請以介面標示及[架構說明](docs/ARCHITECTURE.md)確認各情境的實作範圍。
+### 模擬情境與實作狀態
+
+| 情境 | 實作狀態與重點 |
+| --- | --- |
+| 外牆裂縫滲水 | 網格模擬：降雨入水、裂縫傳輸、偏移的表面症狀、量測、鑽孔、PU 注入及逐步乾燥。 |
+| 浴室防水層失效 | 網格模擬：面狀用水經防水缺損進入樓板，水分可移往樓下天花或相鄰房間牆腳；可比較表面整理和源頭防水修復。 |
+| 熱水暗管破損 | 網格模擬：受壓管線持續供水，症狀可與破管位置不同；關閥、隔離舊管、接通明管後恢復供水驗證。 |
+| 排水管破損 | 新引擎診斷情境：依排水使用事件進行有限時間的單支管測試、觀察通量，再選擇修復。 |
+| 多重漏水 | 新引擎診斷情境：浴室防水層失效與排水管破損同時存在，需分別測試、修復及驗證來源。 |
+| 地下室負水壓 | 新引擎診斷情境：地下水位推導相對水壓；室內側封堵可降低出水，但不會切斷外側水源。 |
+| 其他情境 | 窗框／窗台、管線漏水陷阱、結露與高濕度、樓頂陽台仍保留舊版展示邏輯，尚未遷移至網格物理引擎。 |
+
+### 建議操作流程
+
+1. 選擇情境，先觀察供水來源、使用事件與模擬時間的關係。
+2. 用含水率儀比較濕區、乾區及不同觀察面；單次讀值只代表探頭所在位置。
+3. 依含水變化、用水事件和症狀分布判斷來源，不要只憑壁癌外觀定位。
+4. 修復真正的供水來源，再以相同供水條件執行驗證。
+5. 觀察水分逐漸乾燥；已累積的白華、黴菌與表面損傷仍需另外整理。
+
+Scenario 02A 可切換觀察樓下天花與相鄰房間牆腳。只清理或重塗室內表面不會關閉防水層破口或停止用水；要比較源頭修復效果，需依畫面提示停止地坪用水、完成防水修復，再恢復相同用水條件。
+
+### 工具與判讀
+
+| 工具 | 模擬用途 |
+| --- | --- |
+| 含水率儀 | 讀取探頭位置的牆面、樓板或地板網格狀態。 |
+| 紅外線熱像 | 依含水與環境條件估算表面溫度差；不是校正過的現場測溫儀。 |
+| 鑽孔與 PU 注入 | Scenario 01 的教學修復流程；效果依孔位與裂縫連通狀態改變。 |
+| Epoxy、凝膠與防水塗層 | 各自依材料用途限制發揮作用，不會自動取代管線隔離或內部水源修復。 |
 
 ### 開始使用
 
-**線上版：**開啟上方 GitHub Pages 連結即可使用。首次載入需要網路連線；三維場景依賴支援 WebGL 的瀏覽器。
+**本機執行需求：**Node.js、pnpm，以及支援 WebGL 的瀏覽器。
 
-**本機開發：**需要 Node.js 與 pnpm。安裝依賴並啟動 Vite 開發伺服器：
+安裝依賴並啟動開發伺服器：
 
 ```sh
 pnpm install --frozen-lockfile
 pnpm dev
 ```
 
-啟動後使用終端機顯示的網址開啟模擬器。建置正式版本：
+使用終端機顯示的本機網址開啟模擬器。建立正式版：
 
 ```sh
 pnpm build
 ```
 
-### 開發驗證
+### 開發與驗證
+
+執行靜態檢查、型別檢查、模擬測試與建置：
 
 ```sh
 pnpm lint
 pnpm typecheck
 pnpm test
+pnpm build
 ```
 
-瀏覽器互動測試需先在另一個終端機啟動 `pnpm dev`：
+瀏覽器互動測試需先在另一個終端機啟動開發伺服器，再執行：
 
 ```sh
 pnpm test:browser
 ```
 
-各項測試範圍及已知限制記錄於[驗證說明](docs/VALIDATION.md)。
+測試範圍與已知限制記錄於[驗證說明](docs/VALIDATION.md)。
 
-### 技術架構
+### 系統架構
 
-- **Simulation:** TypeScript 模擬引擎以固定時間步更新唯一的 `SimulationState`。
-- **Tools:** 滑鼠與觸控操作轉成經驗證的模擬動作。
-- **Renderer:** Three.js 與 Canvas 將模擬狀態呈現在既有場景中；渲染不回寫物理狀態。
-- **UI:** DOM 顯示工具、量測值、情境資訊、控制項與診斷回饋。
+| 層級 | 責任 |
+| --- | --- |
+| Simulation | TypeScript 引擎以固定時間步更新唯一的 SimulationState。 |
+| Tools | 將滑鼠與觸控操作轉成經驗證的模擬動作。 |
+| Renderer | Three.js 與 Canvas 將狀態呈現在既有場景；渲染不回寫物理狀態。 |
+| UI | DOM 顯示工具、量測值、情境、控制項與診斷回饋。 |
 
-完整模組責任、資料流程與模型假設見[架構說明](docs/ARCHITECTURE.md)。專案驗證紀錄見[驗證說明](docs/VALIDATION.md)。
+完整模組責任、資料流程與模型假設見[架構說明](docs/ARCHITECTURE.md)。
 
-### 專業與安全界線
+### 模型與安全界線
 
-漏水症狀的位置不一定等於水源。清理壁癌、批土或表面塗裝不會停止持續供水；應先診斷來源，再選擇相符的源頭修復。鑽孔、注入、化學材料與結構判斷均可能涉及現場安全及專業風險，請勿將本模擬器當作施工參數或工程保證。
+這是診斷與因果關係的教學模擬，不是現場檢測儀器、結構分析工具或施工指引。相對含水指標、壓力、注入量、時間及材料反應未經現場校準；不能當作法規、產品額定值、施工參數或工程保證。實際鑽孔、注入、化學品和結構判斷，應依現場條件、產品資料、適用規範與合格專業人員評估。
 
 ### 授權與第三方素材
 
-本專案由 Calvin Huang 撰寫的原創程式碼、模擬器介面與專案文件，依 [PolyForm Noncommercial License 1.0.0](LICENSE) 授權。授權允許依條款作非商業用途、修改及散布；商業用途不在此授權範圍內，須另向權利人取得許可。授權原文另將慈善組織、教育機構、公共研究組織、公共安全或健康組織、環境保護組織及政府機關的使用列為允許用途，不因經費來源而改變。若你的要求是這些組織也不得在任何有資金往來的情況下使用，PolyForm 標準條款可能不完全符合，需另行擬定並審閱條款。法律條文以英文版 `LICENSE` 為準；本專案屬於「公開原始碼、限非商業使用」，不是 OSI 定義下的開源軟體。
+由 Calvin Huang 撰寫的原創模擬器程式碼、介面與專案文件，依 [PolyForm Noncommercial License 1.0.0](LICENSE) 授權。商業用途不在本授權範圍內，需另向權利人取得許可。授權原文列出的慈善、教育、公共研究、公共安全或健康、環境保護及政府組織用途，依條款即使有資金來源也可能屬允許用途；如需排除這些用途，標準條款未必符合需求。英文版 LICENSE 為準。本專案為「公開原始碼、限非商業使用」，不是 OSI 定義下的開源軟體。
 
-`AGENTS.md` 含有依課程教材整理的開發指引，明確排除於本專案 PolyForm 授權範圍之外；其中第三方教材表達的權利仍屬各自權利人。第三方軟體與素材也保留各自授權，不因本專案使用 PolyForm 而改變。詳見 [`NOTICE`](NOTICE) 與[第三方授權清單](THIRD-PARTY-NOTICES.md)。網站建置時會將授權與聲明檔一併複製到 `dist/`，GitHub Pages 也提供授權連結。
+AGENTS.md 含有依課程教材整理的開發指引，明確排除於本專案授權之外；其中第三方教材仍由各自權利人持有。Three.js 與 Poly Haven 等第三方軟體及素材依各自授權使用。詳見 [NOTICE](NOTICE) 與[第三方授權清單](THIRD-PARTY-NOTICES.md)。
 
 <a id="english"></a>
 ## English
 
-An interactive educational simulator for building leak diagnosis and repair. Explore how water enters walls and slabs from different sources, travels through materials and joints, and creates visible symptoms. Use measurements and source repairs to examine cause-and-effect relationships.
+Learn building leak diagnosis through cause-and-effect simulation. Track water sources, transport through materials, and surface damage, then use measurements and source repairs to examine your diagnosis.
 
-**Live demo:** [Wall Pathology Simulator on GitHub Pages](https://calvinhuangcm.github.io/home-pathology-simulator/)
-
-This project teaches engineering concepts and diagnostic workflows. It is not a field inspection instrument, structural analysis tool, or construction guide. Simulation values use a relative teaching scale. Real-world decisions require site inspection, product documentation, applicable local requirements, and assessment by qualified professionals.
+**Online version:** GitHub Pages is configured to deploy with GitHub Actions. This push will trigger the first deployment. The site URL is [calvinhuangcm.github.io/home-pathology-simulator](https://calvinhuangcm.github.io/home-pathology-simulator/); it will be available after the deployment workflow succeeds.
 
 ### Features
 
-- **Layered walls and 3D scene:** Retains the Three.js scene and interaction model, with grid state for moisture, cracks, waterproofing, damage, and repair materials.
-- **Causal moisture simulation:** Sources, material transport, crack connectivity, evaporation, drying, and cumulative damage update from one simulation state. Measurement tools read the probe location and do not use random readings.
-- **Diagnostic tools:** Moisture measurements, educational thermal estimates, drilling and PU injection, plus Epoxy, gel, surface waterproofing, and repair verification.
-- **Floor inspection:** Separate floor material layers, moisture measurements, and finite-duration spot water tests.
-- **Time controls:** Pause or change simulation speed to observe supply, diffusion, damage, repair, and drying.
-- **Multilingual interface:** Traditional Chinese, English, and Japanese. Changing languages does not reset simulation progress.
-
-### Scenarios
-
-| Scenario | Simulation |
+| Feature | Description |
 | --- | --- |
-| Exterior wall crack | Rain entry, crack transport, internal wall diffusion, offset surface symptoms, measurement, drilling, PU injection, and gradual drying. |
-| Bathroom membrane failure | Area water use enters the slab through a damaged membrane and may reach the ceiling below or the base of an adjacent room wall. Compare surface cleanup with source-level membrane repair. |
-| Concealed hot-water pipe failure | A pressurized pipe continues to supply water, and symptoms may appear away from the break. Close the valve, isolate the old pipe, connect a replacement route, then verify after restoring the original supply conditions. |
-| Drainage, multiple leaks, and basement | Test drain branches during drainage events, repair multiple sources independently, and model relative basement water pressure from the scenario water level. |
+| Causal moisture simulation | Sources, material transport, cracks, waterproofing, evaporation, cumulative damage, and repair effects are derived from simulation state; moisture readings are not random. |
+| Wall and cutaway views | The existing Three.js scene presents wall surfaces, material layers, moisture fields, cracks, and repair state. |
+| Diagnostic tools | Moisture meter, educational thermal estimates, drilling, PU injection, Epoxy, gel, surface waterproofing, and diagnostic feedback. |
+| Indoor floor | Separate floor material layers, floor measurements, finite-duration spot water tests, and moisture exchange at the wall junction. |
+| Time and language controls | Pause or use 1×, 5×, and 20× speed; the interface supports Traditional Chinese, English, and Japanese. |
 
-Layered-grid simulations are implemented for the exterior crack, bathroom membrane failure, and concealed hot-water pipe scenarios. Some other selectable scenarios still use legacy demonstration logic. Check the interface labels and [architecture guide](docs/ARCHITECTURE.md) for the implementation status of each scenario.
+### Scenarios and Implementation Status
+
+| Scenario | Status and focus |
+| --- | --- |
+| Exterior wall crack | Grid simulation: rain entry, crack transport, offset surface symptoms, measurements, drilling, PU injection, and gradual drying. |
+| Bathroom membrane failure | Grid simulation: area water use enters the slab through a damaged membrane and may reach the ceiling below or an adjacent room wall base. Compare surface cleanup with source-level membrane repair. |
+| Concealed hot-water pipe failure | Grid simulation: a pressurized pipe continues to supply water, and symptoms may appear away from the break. Close the valve, isolate the old pipe, connect an exposed replacement, then verify after restoring supply. |
+| Drain-pipe failure | New-engine diagnostic scenario: run a finite single-branch test during a drainage event, observe flow, then choose a repair. |
+| Multiple leaks | New-engine diagnostic scenario: bathroom membrane failure and drain-pipe damage coexist; test, repair, and verify each source separately. |
+| Basement negative-side pressure | New-engine diagnostic scenario: groundwater level determines relative pressure. Interior-side sealing may reduce visible seepage but does not cut off the exterior source. |
+| Other scenarios | Window/frame leakage, the pipe-leak trap, condensation/high humidity, and rooftop/balcony leakage retain legacy demonstration logic and have not been migrated to the grid physics engine. |
+
+### Suggested Workflow
+
+1. Choose a scenario and observe how water supply, usage events, and simulation time relate.
+2. Compare wet and dry areas and different observation surfaces with the moisture meter. A reading describes the probe location.
+3. Use moisture trends, usage events, and symptom distribution to diagnose the source instead of relying on visible wall damage alone.
+4. Repair the actual water source, then verify the result under the same supply conditions.
+5. Observe gradual drying. Accumulated efflorescence, mold, and surface damage require separate cleanup.
+
+Scenario 02A lets you inspect both the ceiling below and the base of an adjacent room wall. Cleaning or repainting the room-side surface does not close a membrane defect or stop water use. To compare source-repair results, stop floor use as prompted, complete the membrane repair, and restore the same usage conditions.
+
+### Tools and Interpretation
+
+| Tool | Simulated use |
+| --- | --- |
+| Moisture meter | Reads the grid state at the probe location on a wall, slab, or floor. |
+| Infrared thermal view | Estimates surface temperature differences from moisture and environmental conditions; it is not a calibrated field instrument. |
+| Drilling and PU injection | An educational repair workflow for Scenario 01; results depend on hole placement and crack connectivity. |
+| Epoxy, gel, and waterproof coating | Each has material-specific limits and does not automatically replace pipe isolation or repair of an internal water source. |
 
 ### Getting Started
 
-**Online:** Open the GitHub Pages link above. An internet connection is required for the initial page load. The 3D scene requires a WebGL-capable browser.
+**Requirements:** Node.js, pnpm, and a WebGL-capable browser.
 
-**Local development:** Requires Node.js and pnpm. Install dependencies and start the Vite development server:
+Install dependencies and start the development server:
 
 ```sh
 pnpm install --frozen-lockfile
 pnpm dev
 ```
 
-Open the URL printed in the terminal. Build the production version with:
+Open the local URL printed in the terminal. Create a production build with:
 
 ```sh
 pnpm build
 ```
 
-### Development Checks
+### Development and Validation
+
+Run lint, type checking, simulation tests, and a production build:
 
 ```sh
 pnpm lint
 pnpm typecheck
 pnpm test
+pnpm build
 ```
 
-Browser interaction tests require `pnpm dev` to be running in another terminal:
+Browser interaction tests require the development server to be running in another terminal:
 
 ```sh
 pnpm test:browser
@@ -147,100 +193,126 @@ See the [validation guide](docs/VALIDATION.md) for test coverage and known limit
 
 ### Architecture
 
-- **Simulation:** A TypeScript engine updates the single authoritative `SimulationState` on fixed time steps.
-- **Tools:** Mouse and touch interactions become validated simulation actions.
-- **Renderer:** Three.js and Canvas render simulation state in the existing scene; rendering does not write back to physical state.
-- **UI:** The DOM presents tools, measurements, scenario information, controls, and diagnostic feedback.
+| Layer | Responsibility |
+| --- | --- |
+| Simulation | A TypeScript engine updates the single authoritative SimulationState on fixed time steps. |
+| Tools | Converts mouse and touch input into validated simulation actions. |
+| Renderer | Three.js and Canvas render state in the existing scene; rendering does not write back to physical state. |
+| UI | The DOM presents tools, measurements, scenarios, controls, and diagnostic feedback. |
 
-See the [architecture guide](docs/ARCHITECTURE.md) for module responsibilities, data flow, and model assumptions. See the [validation guide](docs/VALIDATION.md) for project checks.
+See the [architecture guide](docs/ARCHITECTURE.md) for module responsibilities, data flow, and model assumptions.
 
-### Professional and Safety Boundaries
+### Model and Safety Boundaries
 
-The visible location of water damage may differ from the source. Cleaning wall damage, applying putty, or repainting will not stop an active water source. Diagnose the source before selecting a source-level repair. Drilling, injection, chemicals, and structural assessment involve site-specific safety and professional risks; do not treat this simulator as a set of construction parameters or an engineering guarantee.
+This project is an educational simulation of diagnosis and cause and effect. It is not a field inspection instrument, structural analysis tool, or construction guide. Relative moisture, pressure, injection volume, time, and material response are not calibrated to field conditions. Do not treat them as regulations, product ratings, construction parameters, or engineering guarantees. Real drilling, injection, chemical use, and structural decisions require site-specific assessment, product documentation, applicable requirements, and qualified professionals.
 
 ### License and Third-Party Materials
 
-The original application code, simulator interface, and project documentation authored by Calvin Huang are licensed under the [PolyForm Noncommercial License 1.0.0](LICENSE). It permits use, modification, and redistribution for permitted noncommercial purposes under its terms. Commercial purposes are not granted by this license and require separate permission from the rights holder. The license also expressly permits use by charitable organizations, educational institutions, public research organizations, public safety or health organizations, environmental protection organizations, and government institutions regardless of funding source. If you intend to prohibit every funded or paid use by those organizations too, the standard PolyForm terms may not fully match that requirement and need separate legal review. The English `LICENSE` file is authoritative. This is a source-available, noncommercial project, not open source under the OSI definition.
+The original simulator code, interface, and project documentation authored by Calvin Huang are licensed under the [PolyForm Noncommercial License 1.0.0](LICENSE). Commercial use is not granted and requires separate permission from the rights holder. The license expressly permits certain charitable, educational, public research, public safety or health, environmental protection, and government organization uses regardless of funding source. If you need to exclude those uses, the standard terms may not fully match your requirement. The English LICENSE text is authoritative. This is a source-available, noncommercial project, not open source under the OSI definition.
 
-`AGENTS.md` contains development guidance adapted from course materials and is expressly excluded from this project license; rights to any third-party course material remain with their respective owners. Third-party software and assets keep their own licenses, which are not changed by this project's PolyForm license. See [`NOTICE`](NOTICE) and the [third-party license inventory](THIRD-PARTY-NOTICES.md). The build copies these license and notice files into `dist/`, and GitHub Pages links to them.
+AGENTS.md contains development guidance adapted from course materials and is expressly excluded from this project license; third-party course material remains with its respective rights holders. Third-party software and assets, including Three.js and Poly Haven materials, retain their own licenses. See [NOTICE](NOTICE) and the [third-party license inventory](THIRD-PARTY-NOTICES.md).
 
 <a id="japanese"></a>
 ## 日本語
 
-建物の漏水診断と補修を学ぶためのインタラクティブなシミュレーターです。水がさまざまな水源から壁や床スラブに入り、材料や接合部を通って移動し、表面症状を生じる過程を観察できます。測定と水源の補修を通じて、原因と結果の関係を確認できます。
+建物の漏水診断を、原因と結果のシミュレーションで学べます。水源、材料内の水分移動、表面損傷を追跡し、測定と水源側の補修によって診断を確認します。
 
-**オンライン版：**[GitHub Pages の壁面劣化シミュレーター](https://calvinhuangcm.github.io/home-pathology-simulator/)
-
-本プロジェクトは、工学の概念と診断手順を学ぶためのモデルです。現場用の検査機器、構造解析ツール、施工手順書ではありません。シミュレーションの数値は相対的な教材用スケールです。実際の判断には、現場調査、製品資料、適用される地域の要件、および有資格の専門家による評価が必要です。
+**オンライン版：**GitHub Pages は GitHub Actions でデプロイする設定です。今回の push で初回デプロイが開始されます。サイト URL は [calvinhuangcm.github.io/home-pathology-simulator](https://calvinhuangcm.github.io/home-pathology-simulator/) です。デプロイワークフローが成功すると利用できます。
 
 ### 主な機能
 
-- **層構成の壁と3Dシーン：**既存の Three.js シーンと操作方法を維持し、含水、ひび割れ、防水層、損傷、補修材をグリッド状態で表示します。
-- **因果関係に基づく含水シミュレーション：**水源、材料内の移動、ひび割れの連結、蒸発・乾燥、累積損傷を単一のシミュレーション状態から更新します。測定ツールはプローブ位置の状態を読み取り、ランダムな測定値は使用しません。
-- **診断ツール：**含水測定、教材用の熱画像推定、穿孔と PU 注入、Epoxy、ゲル、表面防水、補修後の検証を利用できます。
-- **床面の調査：**独立した床材層、含水測定、時間制限付きの局所散水テストを備えています。
-- **時間制御：**一時停止や時間倍率の変更により、給水、拡散、損傷、補修、乾燥の変化を観察できます。
-- **多言語 UI：**繁体字中国語、英語、日本語に対応します。言語を切り替えてもシミュレーションの進行状況はリセットされません。
-
-### シナリオ
-
-| シナリオ | シミュレーション内容 |
+| 機能 | 説明 |
 | --- | --- |
-| 外壁のひび割れ漏水 | 降雨による浸入、ひび割れ内の移動、壁内部の拡散、水源からずれた表面症状、測定、穿孔、PU 注入、段階的な乾燥を扱います。 |
-| 浴室防水層の劣化 | 面状の散水が防水層の損傷部から床スラブに入り、階下の天井や隣室の壁脚へ移動する場合を扱います。表面清掃と水源側の防水補修を比較できます。 |
-| 壁内の給湯管破損 | 加圧された配管から水が流れ続け、破損箇所とは異なる位置に症状が現れる場合を扱います。止水、旧配管の隔離、新しい配管経路への接続後、元の給水条件に戻して検証します。 |
-| 排水、多重漏水、地下室 | 排水時に支管をテストし、複数の水源を個別に補修します。地下室ではシナリオの水位から相対的な水圧をモデル化します。 |
+| 因果関係に基づく含水シミュレーション | 水源、材料内の移動、ひび割れ、防水層、蒸発、累積損傷、補修効果をシミュレーション状態から計算します。含水率に乱数は使いません。 |
+| 壁面と断面の表示 | 既存の Three.js シーンに壁面、材料層、含水分布、ひび割れ、補修状態を表示します。 |
+| 診断ツール | 含水計、教材用の熱画像推定、穿孔、PU 注入、Epoxy、ゲル、表面防水、診断フィードバックを利用できます。 |
+| 室内床面 | 独立した床材層、含水測定、時間制限付きの局所散水テスト、壁脚部との水分交換を備えています。 |
+| 時間と言語の操作 | 一時停止、1×・5×・20×の速度変更に対応し、繁体字中国語、英語、日本語で表示できます。 |
 
-外壁ひび割れ、浴室防水層の劣化、壁内給湯管破損には層別グリッドシミュレーションを実装しています。選択できるその他のシナリオには、旧来のデモ表示を使うものがあります。各シナリオの実装状況は、画面の表示と[アーキテクチャガイド](docs/ARCHITECTURE.md)を確認してください。
+### シナリオと実装状況
+
+| シナリオ | 状況と内容 |
+| --- | --- |
+| 外壁ひび割れ | グリッドシミュレーション：降雨の浸入、ひび割れ内の移動、水源からずれた表面症状、測定、穿孔、PU 注入、段階的な乾燥。 |
+| 浴室防水層の劣化 | グリッドシミュレーション：面状の散水が防水層の損傷部から床スラブに入り、階下の天井や隣室の壁脚へ移動します。表面清掃と水源側の補修を比較できます。 |
+| 壁内の給湯管破損 | グリッドシミュレーション：加圧配管から水が流れ続け、破損箇所と異なる位置に症状が出ることがあります。止水、旧配管の隔離、新しい露出配管への接続後、給水を戻して検証します。 |
+| 排水管の破損 | 新しいエンジンの診断シナリオ：排水イベント中に一つの枝管を時間限定で試験し、流量を確認してから補修方法を選びます。 |
+| 複数の漏水 | 新しいエンジンの診断シナリオ：浴室防水層の劣化と排水管の破損が同時に発生し、それぞれ個別に試験・補修・検証します。 |
+| 地下室の負水圧 | 新しいエンジンの診断シナリオ：地下水位から相対水圧を算出します。室内側の封止で見える漏水は減らせますが、外側の水源は止まりません。 |
+| その他のシナリオ | 窓枠・窓台、配管漏水の罠、結露・高湿度、屋上・バルコニーの各シナリオには旧来のデモ処理が残っており、グリッド物理エンジンには未移行です。 |
+
+### 推奨する操作手順
+
+1. シナリオを選び、給水、使用イベント、シミュレーション時間の関係を観察します。
+2. 含水計で湿潤部と乾燥部、異なる観察面を比較します。測定値はプローブ位置の状態を示します。
+3. 表面の症状だけで決めず、含水の変化、使用イベント、症状の分布から水源を診断します。
+4. 水源そのものを補修し、同じ給水条件で結果を検証します。
+5. 水分が徐々に乾く様子を観察します。蓄積した白華、カビ、表面損傷は別途清掃や補修が必要です。
+
+Scenario 02A では階下の天井と隣室の壁脚を切り替えて観察できます。室内側の清掃や塗り直しでは防水層の破損や継続中の散水は止まりません。水源補修を比較する場合は、画面の案内に従って床面の使用を止め、防水層を補修してから、同じ使用条件に戻してください。
+
+### ツールと判定
+
+| ツール | シミュレーション上の用途 |
+| --- | --- |
+| 含水計 | 壁、床スラブ、床面のグリッドからプローブ位置の状態を読み取ります。 |
+| 赤外線サーマル表示 | 含水状態と環境条件から表面温度差を推定します。校正済みの現場測定器ではありません。 |
+| 穿孔と PU 注入 | Scenario 01 の教材用補修フローです。効果は孔位置とひび割れの連結状態に応じて変わります。 |
+| Epoxy、ゲル、防水塗膜 | 各材料の用途と制約に従って作用し、配管の隔離や内部水源の補修を代替しません。 |
 
 ### 利用方法
 
-**オンライン版：**上記の GitHub Pages リンクを開いてください。初回表示にはインターネット接続が必要です。3D シーンには WebGL 対応ブラウザーが必要です。
+**必要環境：**Node.js、pnpm、WebGL 対応ブラウザー。
 
-**ローカル開発：**Node.js と pnpm が必要です。依存関係をインストールして Vite 開発サーバーを起動します。
+依存関係をインストールし、開発サーバーを起動します。
 
 ```sh
 pnpm install --frozen-lockfile
 pnpm dev
 ```
 
-ターミナルに表示された URL を開いてください。本番用ビルドは次のコマンドで作成できます。
+ターミナルに表示されたローカル URL を開いてください。本番用ビルドは次のコマンドで作成できます。
 
 ```sh
 pnpm build
 ```
 
-### 開発時の確認
+### 開発と検証
+
+Lint、型チェック、シミュレーションテスト、本番ビルドを実行します。
 
 ```sh
 pnpm lint
 pnpm typecheck
 pnpm test
+pnpm build
 ```
 
-ブラウザー操作テストを実行するには、別のターミナルで `pnpm dev` を起動しておきます。
+ブラウザー操作テストの実行中は、別のターミナルで開発サーバーを起動しておきます。
 
 ```sh
 pnpm test:browser
 ```
 
-テスト範囲と既知の制限については[検証ガイド](docs/VALIDATION.md)を参照してください。
+テスト範囲と既知の制限は[検証ガイド](docs/VALIDATION.md)を参照してください。
 
 ### アーキテクチャ
 
-- **Simulation：**TypeScript のエンジンが、唯一の `SimulationState` を固定時間ステップで更新します。
-- **Tools：**マウスとタッチ操作を検証済みのシミュレーション操作に変換します。
-- **Renderer：**Three.js と Canvas で既存シーンに状態を描画します。描画処理から物理状態を書き換えません。
-- **UI：**DOM でツール、測定値、シナリオ情報、操作ボタン、診断結果を表示します。
+| 層 | 責任 |
+| --- | --- |
+| Simulation | TypeScript エンジンが単一の SimulationState を固定時間ステップで更新します。 |
+| Tools | マウスとタッチ操作を検証済みのシミュレーション操作に変換します。 |
+| Renderer | Three.js と Canvas で既存シーンに状態を描画します。描画処理から物理状態を書き換えません。 |
+| UI | DOM でツール、測定値、シナリオ、操作ボタン、診断結果を表示します。 |
 
-モジュールの責務、データの流れ、モデルの前提は[アーキテクチャガイド](docs/ARCHITECTURE.md)を、プロジェクトの検証記録は[検証ガイド](docs/VALIDATION.md)を参照してください。
+モジュールの責任、データの流れ、モデルの前提については[アーキテクチャガイド](docs/ARCHITECTURE.md)を参照してください。
 
-### 専門性と安全に関する注意
+### モデルと安全に関する注意
 
-水による症状の位置は、水源の位置と異なることがあります。壁面の清掃、パテ処理、再塗装では、継続中の水源は止まりません。まず水源を診断し、その水源に対する補修方法を選んでください。穿孔、注入、薬剤、構造判断には現場固有の安全面と専門上のリスクがあります。本シミュレーターを施工条件や工事保証として扱わないでください。
+本プロジェクトは診断と因果関係を学ぶためのシミュレーションです。現場用検査機器、構造解析ツール、施工ガイドではありません。相対含水値、圧力、注入量、時間、材料反応は現場条件に合わせて校正されていません。法令、製品定格、施工条件、工事保証として扱わないでください。実際の穿孔、注入、薬剤使用、構造判断には、現場条件、製品資料、適用要件、有資格専門家による評価が必要です。
 
 ### ライセンスと第三者素材
 
-Calvin Huang が作成した本プロジェクトのオリジナルコード、シミュレーター UI、プロジェクト文書は、[PolyForm Noncommercial License 1.0.0](LICENSE) の下で提供されます。条項に従う非商用目的での利用、改変、再配布が許可されます。商用目的はこのライセンスの許諾範囲外であり、権利者から別途許可を得る必要があります。また、慈善団体、教育機関、公共研究機関、公共安全・健康機関、環境保護団体、政府機関による利用は、資金源にかかわらず許可されると原文に定められています。これらの機関による資金提供・有償利用もすべて禁止したい場合、PolyForm の標準条項では要件を完全に満たさない可能性があり、別途条項の作成と確認が必要です。法的な本文は英語版の `LICENSE` が優先されます。本プロジェクトは「ソース公開・非商用」であり、OSI の定義におけるオープンソースではありません。
+Calvin Huang が作成したオリジナルのシミュレーターコード、UI、プロジェクト文書は [PolyForm Noncommercial License 1.0.0](LICENSE) に基づきます。商用利用は許諾されておらず、権利者から別途許可を得る必要があります。ライセンスは、慈善、教育、公共研究、公共の安全または健康、環境保護、政府機関による一定の利用を、資金源にかかわらず明示的に許可しています。これらの利用も禁止したい場合、標準条項では要件に合わない可能性があります。英語版 LICENSE が正式な条文です。本プロジェクトは非商用条件付きのソース公開であり、OSI 定義のオープンソースではありません。
 
-`AGENTS.md` には講義資料をもとに整理した開発ガイドが含まれるため、本プロジェクトの PolyForm ライセンスの対象外です。第三者の教材に関する権利は、それぞれの権利者に帰属します。第三者のソフトウェアや素材にも個別のライセンスが適用され、本プロジェクトの PolyForm ライセンスによって変更されません。[`NOTICE`](NOTICE) と[第三者ライセンス一覧](THIRD-PARTY-NOTICES.md)を参照してください。ビルド時にライセンスと通知ファイルを `dist/` にコピーし、GitHub Pages からも確認できます。
+AGENTS.md には講義教材をもとにした開発指針が含まれるため、本プロジェクトのライセンス対象から明示的に除外されています。第三者教材の権利は各権利者に帰属します。Three.js、Poly Haven などの第三者ソフトウェアと素材には、それぞれのライセンスが適用されます。[NOTICE](NOTICE) と[第三者ライセンス一覧](THIRD-PARTY-NOTICES.md)を参照してください。
