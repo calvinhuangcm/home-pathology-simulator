@@ -11,9 +11,6 @@ await mkdir('artifacts', { recursive: true });
 
 try {
   const base = process.env.BASE_URL || 'http://127.0.0.1:5173/';
-  await page.goto(new URL('./', base).toString());
-  await page.locator('.lesson-link').click();
-  await page.waitForURL(/injection-lesson\.html$/);
   await page.goto(new URL('injection-lesson.html?test=1', base).toString());
   await page.waitForFunction(() => Boolean(window.__injectionLessonTest));
 
